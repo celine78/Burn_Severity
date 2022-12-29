@@ -1,19 +1,19 @@
-import glob
-from typing import List
 import cv2
-
+import glob
 import numpy as np
 import pandas as pd
+from typing import List
+from PIL import Image
+from skimage import color, filters, io
 import torch
 import torch.nn.functional as fn
-from PIL import Image
-from skimage import color, filters
-from skimage import io
+
 
 
 class Preprocessing(object):
 
-    def load_dataset(self, images_path: str, masks_path: str):
+    @staticmethod
+    def load_dataset(images_path: str, masks_path: str):
         masks_dir = [file_names for file_names in glob.glob(masks_path)]
         aoi_names = [file_name[47:-5] for file_name in masks_dir]
         images_dir = [dir_name for dir_name in glob.glob(images_path) for aoi in aoi_names if aoi in dir_name]
@@ -21,7 +21,8 @@ class Preprocessing(object):
         masks_dir.sort()
         return images_dir, masks_dir
 
-    def resize(self, image_dir, mask_dir):
+    @staticmethod
+    def resize(image_dir, mask_dir):
         mask = Image.open(mask_dir)
         image = io.imread(image_dir)
         image_height = int(image.shape[0])
@@ -35,7 +36,8 @@ class Preprocessing(object):
         image = cv2.resize(image, dsize=(512, 512), interpolation=cv2.INTER_LINEAR)
         return image, mask
 
-    def get_mean_std(self, images):
+    @staticmethod
+    def get_mean_std(images):
         """
         Mean / Unit variance
         """
@@ -45,7 +47,8 @@ class Preprocessing(object):
 
         return mean, std
 
-    def get_min_max(self, images):
+    @staticmethod
+    def get_min_max(images):
         min_value = []
         max_value = []
         for c in range(images.size()[3]):
@@ -53,7 +56,8 @@ class Preprocessing(object):
             max_value.append(images[:, :, :, c].max())
         return min_value, max_value
 
-    def _mask_multiclass_thresholding(self, mask, classes: int, index):
+    @staticmethod
+    def _mask_multiclass_thresholding(mask, classes: int, index):
         csv_data = pd.read_csv('/Users/celine/Desktop/aoi_data.csv', header=0)
         csv_data = csv_data[csv_data.notna()]
         mask_classes = csv_data['Classes']
@@ -88,7 +92,8 @@ class Preprocessing(object):
         # mask = torch.Tensor(mask)[:,:,None]
         return mask
 
-    def _mask_binary_thresholding(self, mask):
+    @staticmethod
+    def _mask_binary_thresholding(mask):
         mask = torch.Tensor(mask)[:, :, None]
         mask_np = 1 - mask.squeeze().numpy()
         histogram = np.histogram(mask_np)[1]
@@ -140,7 +145,8 @@ class Normalize(object):
             print('Missing values for Normalization/Standardization')
             return
 
-    def _mean_std_norm(self, image, mean, std):
+    @staticmethod
+    def _mean_std_norm(image, mean, std):
         """
         Mean / Unit variance
         """
@@ -148,11 +154,13 @@ class Normalize(object):
             image[:, :, c] = (image[:, :, c] - mean[c]) / std[c]
         return image
 
-    def _min_max_norm(self, image, min_value, max_value):
+    @staticmethod
+    def _min_max_norm(image, min_value, max_value):
         for c in range(image.size()[2]):
             image[:, :, c] = (image[:, :, c] - min_value) / (max_value - min_value)
         return image
 
-    def _l2_norm(self, images):
+    @staticmethod
+    def _l2_norm(images):
         fn.normalize(images, dim=0)
         return images

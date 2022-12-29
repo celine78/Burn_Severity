@@ -1,10 +1,9 @@
-from preprocessing import Preprocessing
-from torch.utils.data import Dataset
-import torch
 import os
 import glob
-import matplotlib.pyplot as plt
+import torch
+from torch.utils.data import Dataset
 
+from preprocessing import Preprocessing
 
 class SegmentationDataset(Dataset):
 
@@ -23,15 +22,10 @@ class SegmentationDataset(Dataset):
         mask = self.masks[index]
         p = Preprocessing()
         mask = p.mask_thresholding(mask, self.class_num, index)
-        if self.save_masks: self.save_mask(mask, self.class_num, index)
+        if self.save_masks:
+            self.save_mask(mask, self.class_num, index)
         if self.transform is not None:
             image, mask = self.transform(image, mask)
-
-        """
-        fig, ax = plt.subplots(1, 2, figsize=(10, 10))
-        ax[0].imshow(image[:, :, 4])
-        ax[1].imshow(mask)
-        """
         image = image.permute(2, 0, 1)
         mask = torch.Tensor(mask.copy())[None, :, :]
 

@@ -1,8 +1,9 @@
+import random
+import math
 import numpy as np
 import torch
-import random
 from skimage import transform
-import math
+
 
 
 class DataAugmentation(object):

@@ -1,28 +1,30 @@
-from dataset import SegmentationDataset
-import torch.nn as nn
 import time
-from tqdm.notebook import tqdm
+import numpy as np
+import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 import segmentation_models_pytorch as smp
-import torch
-import numpy as np
-from preprocessing import Preprocessing, Normalize, DeleteLandsatBands
-from augmentation import DataAugmentation, Compose
+from tqdm.notebook import tqdm
 import matplotlib.pyplot as plt
 
+from dataset import SegmentationDataset
+from preprocessing import Preprocessing, Normalize, DeleteLandsatBands
+from augmentation import DataAugmentation, Compose
 from metrics import mIoU, pixel_accuracy, get_lr
 
 
 class Train(object):
 
-    def dataset_split(self, dataset, p_splits: list):
+    @staticmethod
+    def dataset_split(dataset, p_splits: list):
         train_size = int(p_splits[0] * len(dataset))
         val_size = int(p_splits[1] * len(dataset))
         test_size = len(dataset) - (train_size + val_size)
         train, val, test = random_split(dataset, [train_size, val_size, test_size])
         return train, val, test
 
-    def fit(self, epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, patch=False):
+    @staticmethod
+    def fit(epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, patch=False):
         torch.cuda.empty_cache()
         train_losses = []
         test_losses = []
