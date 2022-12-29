@@ -1,6 +1,6 @@
 # Burn Severity
 
-
+This project aims to detect the burn severity of wildfires using a U-net architecture and post-fire satellite images.
 
 ## Getting started
 
