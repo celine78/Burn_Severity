@@ -4,7 +4,10 @@ import numpy as np
 import torch
 from skimage import transform
 
+import logging.config
 
+logging.config.fileConfig('logging.conf')
+logger = logging.getLogger('burn_severity')
 
 class DataAugmentation(object):
 

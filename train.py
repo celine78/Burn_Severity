@@ -12,6 +12,11 @@ from preprocessing import Preprocessing, Normalize, DeleteLandsatBands
 from augmentation import DataAugmentation, Compose
 from metrics import mIoU, pixel_accuracy, get_lr
 
+import logging.config
+
+logging.config.fileConfig("logging.conf")
+logger = logging.getLogger('burn_severity')
+
 
 class Train(object):
 
@@ -159,27 +164,30 @@ if __name__ == '__main__':
     da = DataAugmentation()
     p = Preprocessing()
     class_num = 2
-    vflip, hflip, rota, shear = da.data_augmentation(0.5, 0.5, 0.25, 0.25, 40, 20)
+    logger.info('Loading dataset')
     images_dir, masks_dir = p.load_dataset(image_path, mask_path)
+    logger.info('Resizing images and masks')
     images, masks = map(list, zip(*[p.resize(img_dir, mask_dir) for img_dir, mask_dir in zip(images_dir, masks_dir)]))
+    logger.info('Data augmentation')
     mean, std = p.get_mean_std(images)
-
+    vflip, hflip, rota, shear = da.data_augmentation(0.5, 0.5, 0.25, 0.25, 40, 20)
     trans = Compose([
         DeleteLandsatBands([9, 12, 13]),
         vflip, hflip, rota, shear,
         Normalize(mean, std),
     ])
-
+    logger.info('Create datasets')
     dataset = SegmentationDataset(images, masks, class_num=class_num, transform=trans)
     train_dataset, val_dataset, test_dataset = train.dataset_split(dataset, [0.7, 0.15, 0.15])
     batch_size = 1
     num_workers = 0
     pin_memory = True
+    logger.info('Create dataloaders')
     train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, num_workers=num_workers,
                               pin_memory=pin_memory)
     val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, num_workers=num_workers,
                             pin_memory=pin_memory)
-
+    logger.info('Load architecture with backbone')
     model = smp.Unet('resnet34', encoder_weights='imagenet', classes=4, activation=None, encoder_depth=5,
                      decoder_channels=[256, 128, 64, 32, 16], in_channels=10)
     max_lr = 1e-3
@@ -189,5 +197,5 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr, epochs=epoch, steps_per_epoch=len(train_loader))
-
+    logger.info('Train model')
     history = train.fit(epoch, model, train_loader, val_loader, criterion, optimizer, scheduler)

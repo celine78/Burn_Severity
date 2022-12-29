@@ -5,6 +5,11 @@ from torch.utils.data import Dataset
 
 from preprocessing import Preprocessing
 
+import logging.config
+
+logging.config.fileConfig('logging.conf')
+logger = logging.getLogger('burn_severity')
+
 class SegmentationDataset(Dataset):
 
     def __init__(self, images, masks, class_num=None, transform=None, save_masks=False):

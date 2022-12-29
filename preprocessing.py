@@ -8,6 +8,10 @@ from skimage import color, filters, io
 import torch
 import torch.nn.functional as fn
 
+import logging.config
+
+logging.config.fileConfig('logging.conf')
+logger = logging.getLogger('burn_severity')
 
 
 class Preprocessing(object):
@@ -19,6 +23,7 @@ class Preprocessing(object):
         images_dir = [dir_name for dir_name in glob.glob(images_path) for aoi in aoi_names if aoi in dir_name]
         images_dir.sort()
         masks_dir.sort()
+        logger.debug(f'Data loaded with {len(images_dir)} images')
         return images_dir, masks_dir
 
     @staticmethod

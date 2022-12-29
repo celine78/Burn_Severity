@@ -2,6 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import logging.config
+
+logging.config.fileConfig('logging.conf')
+logger = logging.getLogger('burn_severity')
+
 # https://github.com/milesial/Pytorch-UNet/blob/master/unet/unet_parts.py
 
 

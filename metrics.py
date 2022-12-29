@@ -2,7 +2,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+import logging.config
 
+logging.config.fileConfig('logging.conf')
+logger = logging.getLogger('burn_severity')
 
 def pixel_accuracy(output, mask):
     with torch.no_grad():
