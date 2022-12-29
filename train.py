@@ -1,4 +1,5 @@
 import time
+import subprocess
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,9 +14,14 @@ from augmentation import DataAugmentation, Compose
 from metrics import mIoU, pixel_accuracy, get_lr
 
 import logging.config
+import wandb
 
 logging.config.fileConfig("logging.conf")
 logger = logging.getLogger('burn_severity')
+
+WANDB_API_KEY = '750ade35afcb71cb11253e643f3ed1509fbd4ddf'
+subprocess.check_output(['wandb', 'login', WANDB_API_KEY, '--relogin'])
+wandb.init(project="burn-severity")
 
 
 class Train(object):
@@ -140,6 +146,14 @@ class Train(object):
                 train_iou.append(iou_score / len(train_loader))
                 train_acc.append(accuracy / len(train_loader))
                 val_acc.append(test_accuracy / len(val_loader))
+                wandb.log({"epoch": e + 1,
+                           "train loss": running_loss / len(train_loader),
+                           "val loss": test_loss / len(val_loader),
+                           "train mIoU": iou_score / len(train_loader),
+                           "val mIoU": val_iou_score / len(val_loader),
+                           "train accuracy": accuracy / len(train_loader),
+                           "val accuracy": test_accuracy / len(val_loader),
+                           })
                 print("Epoch:{}/{}..".format(e + 1, epochs),
                       "Train Loss: {:.3f}..".format(running_loss / len(train_loader)),
                       "Val Loss: {:.3f}..".format(test_loss / len(val_loader)),
@@ -188,8 +202,16 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, num_workers=num_workers,
                             pin_memory=pin_memory)
     logger.info('Load architecture with backbone')
-    model = smp.Unet('resnet34', encoder_weights='imagenet', classes=4, activation=None, encoder_depth=5,
-                     decoder_channels=[256, 128, 64, 32, 16], in_channels=10)
+
+    backbone = 'resnet34'
+    encoder_weights = 'imagenet'
+    encoder_depth = 5
+    decoder_channels = [256, 128, 64, 32, 16]
+    in_channels = 10
+
+    model = smp.Unet(backbone, encoder_weights=encoder_weights, classes=class_num, activation=None,
+                     encoder_depth=encoder_depth,
+                     decoder_channels=decoder_channels, in_channels=in_channels)
     max_lr = 1e-3
     epoch = 5
     weight_decay = 1e-4
@@ -198,4 +220,16 @@ if __name__ == '__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr, epochs=epoch, steps_per_epoch=len(train_loader))
     logger.info('Train model')
+
+    wandb.config.class_num = class_num
+    wandb.config.epochs = epoch
+    wandb.config.batch_size = batch_size
+    wandb.config.in_channels = in_channels
+    wandb.config.backbone = backbone
+    wandb.config.encoder_weights = encoder_weights
+    wandb.config.encoder_depth = encoder_depth
+    wandb.config.decoder_channels = decoder_channels
+    wandb.config.weight_decay = weight_decay
+    wandb.config.max_lr = max_lr
+
     history = train.fit(epoch, model, train_loader, val_loader, criterion, optimizer, scheduler)

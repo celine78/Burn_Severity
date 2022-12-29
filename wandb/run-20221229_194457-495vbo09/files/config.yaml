@@ -1,0 +1,66 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    cli_version: 0.13.7
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    python_version: 3.10.9
+    start_time: 1672339497.977464
+    t:
+      1:
+      - 1
+      - 41
+      - 55
+      - 63
+      - 74
+      2:
+      - 1
+      - 41
+      - 55
+      - 63
+      - 74
+      3:
+      - 19
+      - 23
+      4: 3.10.9
+      5: 0.13.7
+      8:
+      - 5
+backbone:
+  desc: null
+  value: resnet34
+batch_size:
+  desc: null
+  value: 1
+class_num:
+  desc: null
+  value: 2
+decoder_channels:
+  desc: null
+  value:
+  - 256
+  - 128
+  - 64
+  - 32
+  - 16
+encoder_depth:
+  desc: null
+  value: 5
+encoder_weights:
+  desc: null
+  value: imagenet
+epochs:
+  desc: null
+  value: 5
+in_channels:
+  desc: null
+  value: 10
+max_lr:
+  desc: null
+  value: 0.001
+weight_decay:
+  desc: null
+  value: 0.0001

@@ -1,0 +1,42 @@
+{
+    "os": "macOS-12.6.1-x86_64-i386-64bit",
+    "python": "3.10.9",
+    "heartbeatAt": "2022-12-29T18:44:58.527064",
+    "startedAt": "2022-12-29T18:44:57.965289",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/Users/celine/burn-severity/train.py",
+    "codePath": "train.py",
+    "git": {
+        "remote": "https://gitlab.ti.bfh.ch/huttc2/burn-severity.git",
+        "commit": "aaaaab682cd5c3f11327b2841b313ffa9746ed71"
+    },
+    "email": "celine.huettenmoser@students.bfh.ch",
+    "root": "/Users/celine/burn-severity",
+    "host": "ext-136-6.eduroam.unibe.ch",
+    "username": "celine",
+    "executable": "/Users/celine/burn-severity/venv/bin/python",
+    "cpu_count": 4,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 2300,
+        "min": 2300,
+        "max": 2300
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2300,
+            "min": 2300,
+            "max": 2300
+        }
+    ],
+    "disk": {
+        "total": 465.62699127197266,
+        "used": 14.357444763183594
+    },
+    "memory": {
+        "total": 16.0
+    }
+}
