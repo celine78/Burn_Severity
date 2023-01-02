@@ -4,8 +4,8 @@ import torch.nn.functional as F
 
 import logging.config
 
-logging.config.fileConfig('logging.conf')
-logger = logging.getLogger('burn_severity')
+logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
+logger = logging.getLogger(__name__)
 
 # https://github.com/milesial/Pytorch-UNet/blob/master/unet/unet_parts.py
 

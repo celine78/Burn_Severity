@@ -7,8 +7,9 @@ from preprocessing import Preprocessing
 
 import logging.config
 
-logging.config.fileConfig('logging.conf')
-logger = logging.getLogger('burn_severity')
+logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
+logger = logging.getLogger(__name__)
+
 
 class SegmentationDataset(Dataset):
 
@@ -26,13 +27,19 @@ class SegmentationDataset(Dataset):
         image = self.images[index]
         mask = self.masks[index]
         p = Preprocessing()
+        logger.debug(f'image, mask length: {len(image), len(mask)}, Index: {index}')
         mask = p.mask_thresholding(mask, self.class_num, index)
+        logger.debug(f'mask shape: {mask.shape}')
         if self.save_masks:
             self.save_mask(mask, self.class_num, index)
         if self.transform is not None:
+            #logger.debug(f'Image min/max before normalization {image.min(), image.max()}')
             image, mask = self.transform(image, mask)
+            #logger.debug(f'Image min/max after normalization: {image.min(), image.max()}')
         image = image.permute(2, 0, 1)
+        logger.debug(f'Image: {image.size()}')
         mask = torch.Tensor(mask.copy())[None, :, :]
+        logger.debug(f'Mask: {mask.size()}')
 
         return image, mask
 

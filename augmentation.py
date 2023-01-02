@@ -2,12 +2,14 @@ import random
 import math
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
 from skimage import transform
 
 import logging.config
 
-logging.config.fileConfig('logging.conf')
-logger = logging.getLogger('burn_severity')
+logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
+logger = logging.getLogger(__name__)
+
 
 class DataAugmentation(object):
 
@@ -29,7 +31,11 @@ class RandomVflip(object):
         if torch.rand(1) < self.proba:
             image = np.flipud(image)
             mask = np.flipud(mask)
+            logger.debug(f'Image and mask flipped vertically')
         return image, mask
+
+    def __repr__(self):
+        return self.__class__.__name__ + '.Proba:' + str(self.proba)
 
 
 class RandomHflip(object):
@@ -41,7 +47,11 @@ class RandomHflip(object):
         if torch.rand(1) < self.proba:
             image = np.fliplr(image)
             mask = np.fliplr(mask)
+            logger.debug(f'Image and mask flipped horizontally')
         return image, mask
+
+    def __repr__(self):
+        return self.__class__.__name__ + '.Proba:' + str(self.proba)
 
 
 class RandomRotation(object):
@@ -53,6 +63,7 @@ class RandomRotation(object):
         self.i = 0
 
     def __call__(self, image, mask):
+        self.angle_applied = 0
         if torch.rand(1) < self.proba:
             if self.random_angle:
                 angle = random.randint(-self.angle, self.angle)
@@ -60,7 +71,12 @@ class RandomRotation(object):
                 angle = self.angle
             image = transform.rotate(image, angle, mode='reflect', preserve_range=True)
             mask = transform.rotate(mask, angle, mode='reflect', preserve_range=True)
+            self.angle_applied = angle
+            logger.debug(f'Angle: {self.angle_applied}')
         return image, mask
+
+    def __repr__(self):
+        return self.__class__.__name__ + '.Angle:' + str(self.angle_applied) + '.Proba:' + str(self.proba)
 
 
 class RandomShear(object):
@@ -71,6 +87,7 @@ class RandomShear(object):
         self.random_shear = random_shear
 
     def __call__(self, image, mask):
+        self.shear_applied = 0
         if torch.rand(1) < self.proba:
             if self.random_shear:
                 shear = random.randint(-self.shear, self.shear)
@@ -80,7 +97,12 @@ class RandomShear(object):
             trans = transform.AffineTransform(shear=shear)
             image = transform.warp(image, trans, mode='reflect', preserve_range=True)
             mask = transform.warp(mask, trans, mode='reflect', preserve_range=True)
+            self.shear_applied = shear
+            logger.debug(f'Shear: {shear}')
         return image, mask
+
+    def __repr__(self):
+        return self.__class__.__name__ + '.Shear:' + str(self.shear_applied) + '.Proba:' + str(self.proba)
 
 
 class Compose(object):
@@ -88,14 +110,18 @@ class Compose(object):
         self.transforms = transforms
 
     def __call__(self, image, mask):
+        img = image.copy()
+        mask_pre = mask.copy()
         for t in self.transforms:
             image, mask = t(image, mask)
+        logger.debug(f'Image transformed: {np.array_equal(img,image) == False}')
+        logger.debug(f'Mask transformed: {np.array_equal(mask_pre,mask) == False}')
         return image, mask
 
     def __repr__(self) -> str:
         format_string = self.__class__.__name__ + "("
         for t in self.transforms:
             format_string += "\n"
-            format_string += f"    {t}"
+            format_string += f" {t}"
         format_string += "\n)"
         return format_string

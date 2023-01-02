@@ -10,8 +10,8 @@ import torch.nn.functional as fn
 
 import logging.config
 
-logging.config.fileConfig('logging.conf')
-logger = logging.getLogger('burn_severity')
+logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
+logger = logging.getLogger(__name__)
 
 
 class Preprocessing(object):
@@ -23,7 +23,8 @@ class Preprocessing(object):
         images_dir = [dir_name for dir_name in glob.glob(images_path) for aoi in aoi_names if aoi in dir_name]
         images_dir.sort()
         masks_dir.sort()
-        logger.debug(f'Data loaded with {len(images_dir)} images')
+        logger.debug(f'{len(images_dir)} images and {len(masks_dir)} masks retrieved')
+        logger.info(f'Data loaded with {len(images_dir)} images')
         return images_dir, masks_dir
 
     @staticmethod
@@ -39,6 +40,8 @@ class Preprocessing(object):
         image = image.astype('float64')
         mask = cv2.resize(mask, dsize=(512, 512), interpolation=cv2.INTER_LINEAR)
         image = cv2.resize(image, dsize=(512, 512), interpolation=cv2.INTER_LINEAR)
+        #logger.debug(f'Image shape resized: {image.shape}')
+        #logger.debug(f'Mask shape resized: {mask.shape}')
         return image, mask
 
     @staticmethod
@@ -59,10 +62,12 @@ class Preprocessing(object):
         for c in range(images.size()[3]):
             min_value.append(images[:, :, :, c].min())
             max_value.append(images[:, :, :, c].max())
+        logger.debug(f'Min: {min_value}, max: {max_value}')
         return min_value, max_value
 
     @staticmethod
     def _mask_multiclass_thresholding(mask, classes: int, index):
+        logger.debug(f'Handling mask with index {index}')
         csv_data = pd.read_csv('/Users/celine/Desktop/aoi_data.csv', header=0)
         csv_data = csv_data[csv_data.notna()]
         mask_classes = csv_data['Classes']
@@ -77,19 +82,30 @@ class Preprocessing(object):
             classification = None
             print('Number of classes not supported')
 
+        logger.debug(f'Merge: {merge}, classification: {classification}')
+
         mask_np = 1 - mask.squeeze()
         histogram = np.histogram(mask_np)[1]
+        logger.debug(f'Histogram: {histogram}')
         thresholds = filters.threshold_multiotsu(mask_np, int(mask_classes[index]), histogram)
+        logger.debug(f'Thresholds: {thresholds}')
         mask = np.digitize(mask_np, bins=thresholds)
+        logger.debug(f'mMask: {mask}')
         pre, nm1 = np.unique(mask, return_counts=True)
+        logger.debug(f'pre: {pre}, nm1: {nm1}')
         if classes == 4 and isinstance(merge[index], str):
             cl = merge[index].split(',')
+            logger.debug(f'cl {cl}')
             mask[mask == int(cl[0])] = int(cl[1])
+        logger.debug(f'Mask: {mask}')
         new_classes = classification[index].split(',')
+        logger.debug(f'New classes: {new_classes}')
         new_classes.reverse()
         for new_value, old_value in zip(new_classes, np.unique(mask)[::-1]):
             mask[mask == old_value] = int(new_value)
         post, nm2 = np.unique(mask, return_counts=True)
+        logger.debug(f'Pre: {pre}, post: {post}')
+        logger.debug(f'nm1: {nm1}, nm2: {nm2}')
         if len(pre) != len(post) and not isinstance(merge[index], str):
             print('unique pre: ', pre)
             print('unique post: ', post)
@@ -102,31 +118,49 @@ class Preprocessing(object):
         mask = torch.Tensor(mask)[:, :, None]
         mask_np = 1 - mask.squeeze().numpy()
         histogram = np.histogram(mask_np)[1]
+        logger.debug(f'histogram: {histogram}')
         threshold = filters.threshold_otsu(mask_np, histogram)
+        logger.debug(f'threshold: {threshold}')
         mask = (1 - mask >= threshold).int()
         mask = mask.squeeze().numpy()
         return mask
 
     def mask_thresholding(self, mask, classes: int, index):
+        logger.debug(f'classes {classes}, index: {index}')
         if classes == 2:
             mask = self._mask_binary_thresholding(mask)
         else:
             mask = self._mask_multiclass_thresholding(mask, classes, index)
         return mask
 
+    @staticmethod
+    def delete_landsat_bands(image, channels: List[int]):
+        bands = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        if len(set(channels) - set(bands)) != 0:
+            logger.warning(f'Band(s) {set(channels) - set(bands)} are not part of Landsat 8 & 9')
+        channels.sort(reverse=True)
+        for c in channels:
+            image = np.delete(image, c - 1, axis=2)
+        #logger.debug(f'Image shape: {image.shape}')
+        return image
 
+
+"""
 class DeleteLandsatBands(object):
     def __init__(self, channels: List[int]):
+        logger.debug(f'Channels: {channels}')
         self.channels = channels
 
     def __call__(self, image, mask):
         bands = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
         if len(set(self.channels) - set(bands)) != 0:
-            print(f'Band(s) {set(self.channels) - set(bands)} are not part of Landsat 8 & 9')
+            logger.warning(f'Band(s) {set(self.channels) - set(bands)} are not part of Landsat 8 & 9')
         self.channels.sort(reverse=True)
         for c in self.channels:
             image = np.delete(image, c - 1, axis=2)
+        logger.debug(f'Image shape: {image.shape}')
         return image, mask
+"""
 
 
 class Normalize(object):
@@ -137,6 +171,7 @@ class Normalize(object):
         self.min = minimum
         self.max = maximum
         self.images = images
+        logger.debug(f'mean: {mean}, std: {std}, minimum: {minimum}, maximum: {maximum}, images: {images}')
 
     def __call__(self, image, mask):
         image = torch.Tensor(np.array(image))
@@ -149,6 +184,10 @@ class Normalize(object):
         else:
             print('Missing values for Normalization/Standardization')
             return
+
+    def __repr__(self):
+        return self.__class__.__name__ + '.Mean:' + str(self.mean) + '.Std:' + str(self.std) + '.Min:' \
+            + str(self.min) + '.Max:' + str(self.max) + '.Images:' + str(type(self.images))
 
     @staticmethod
     def _mean_std_norm(image, mean, std):
