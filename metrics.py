@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+from tqdm.notebook import tqdm
 
 import logging.config
 
@@ -42,3 +44,115 @@ def mIoU(pred_mask, mask, smooth=1e-10, n_classes=2):
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
+
+
+def predict(model, image, device, plot=True):
+    img, mask = image
+    pred_mask, score = predict_image_mask_pixel(model, img, mask, device)
+    if plot:
+        plot_predictions(img, mask, pred_mask, score)
+
+
+def plot_loss(history):
+    plt.plot(history['val_loss'], label='val', marker='o')
+    plt.plot(history['train_loss'], label='train', marker='o')
+    plt.title('Loss per epoch')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(), plt.grid()
+    plt.show()
+
+
+def plot_score(history):
+    plt.plot(history['train_miou'], label='train_mIoU', marker='*')
+    plt.plot(history['val_miou'], label='val_mIoU', marker='*')
+    plt.title('Score per epoch')
+    plt.ylabel('mean IoU')
+    plt.xlabel('epoch')
+    plt.legend(), plt.grid()
+    plt.show()
+
+
+def plot_acc(history):
+    plt.plot(history['train_acc'], label='train_accuracy', marker='*')
+    plt.plot(history['val_acc'], label='val_accuracy', marker='*')
+    plt.title('Accuracy per epoch')
+    plt.ylabel('Accuracy')
+    plt.xlabel('epoch')
+    plt.legend(), plt.grid()
+    plt.show()
+
+
+def plot_predictions(image, mask, pred_mask, score):
+    fig, ax = plt.subplots(1, 3, figsize=(20, 10))
+    ax[0].imshow(image[4, :, :])
+    ax[0].set_title('Picture')
+
+    ax[1].imshow(mask.squeeze())
+    ax[1].set_title('Ground truth')
+    ax[1].set_axis_off()
+
+    ax[2].imshow(pred_mask.squeeze())
+    ax[2].set_title('UNet-Burn Severity | accuracy {:.3f}'.format(score))
+    ax[2].set_axis_off()
+    plt.show()
+
+
+def predict_image_mask_miou(model, image, mask, device):
+    model.eval()
+    model.to(device)
+    image = image.to(device)
+    mask = mask.to(device)
+    with torch.no_grad():
+        image = image.unsqueeze(0)
+        mask = mask.unsqueeze(0)
+
+        output = model(image)
+        score = mIoU(output, mask)
+        masked = torch.argmax(output, dim=1)
+        masked = masked.cpu().squeeze(0)
+    return masked, score
+
+
+def predict_image_pixel(model, image, device):
+    image = image.to(device)
+    with torch.no_grad():
+        image = image.unsqueeze(0)
+        output = model(image.float())
+        masked = torch.argmax(output, dim=1)
+        masked = masked.cpu().squeeze(0)
+    return masked
+
+
+def predict_image_mask_pixel(model, image, mask, device):
+    model.eval()
+    model.to(device)
+    image = image.to(device)
+    mask = mask.to(device)
+    with torch.no_grad():
+        image = image.unsqueeze(0)
+        mask = mask.unsqueeze(0)
+
+        output = model(image)
+        acc = pixel_accuracy(output, mask)
+        masked = torch.argmax(output, dim=1)
+        masked = masked.cpu().squeeze(0)
+    return masked, acc
+
+
+def miou_score(model, test_set, device):
+    score_iou = []
+    for i in tqdm(range(len(test_set))):
+        img, mask = test_set[i]
+        pred_mask, score = predict_image_mask_miou(model, img, mask, device)
+        score_iou.append(score)
+    return score_iou
+
+
+def pixel_acc(model, test_set, device):
+    accuracy = []
+    for i in tqdm(range(len(test_set))):
+        img, mask = test_set[i]
+        pred_mask, acc = predict_image_mask_pixel(model, img, mask, device)
+        accuracy.append(acc)
+    return accuracy

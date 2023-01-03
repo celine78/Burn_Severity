@@ -44,6 +44,14 @@ class Preprocessing(object):
         #logger.debug(f'Mask shape resized: {mask.shape}')
         return image, mask
 
+
+    @staticmethod
+    def resize_image(image):
+        assert type(image).__module__ == np.__name__
+        image = image.astype('float64')
+        image = cv2.resize(image, dsize=(512, 512), interpolation=cv2.INTER_LINEAR)
+        return image
+
     @staticmethod
     def get_mean_std(images):
         """

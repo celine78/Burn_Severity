@@ -1,6 +1,9 @@
 import time
 import subprocess
 import numpy as np
+from datetime import datetime
+import os
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
@@ -11,7 +14,8 @@ import matplotlib.pyplot as plt
 from dataset import SegmentationDataset
 from preprocessing import Preprocessing, Normalize
 from augmentation import DataAugmentation, Compose
-from metrics import mIoU, pixel_accuracy, get_lr
+from metrics import mIoU, pixel_accuracy, get_lr, plot_loss, plot_acc, plot_score, predict_image_mask_miou, \
+    miou_score, pixel_acc, predict
 
 import logging.config
 import wandb
@@ -41,7 +45,7 @@ class Train(object):
         return train, val, test
 
     @staticmethod
-    def fit(epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, patch=False):
+    def fit(epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, device, patch=False):
         torch.cuda.empty_cache()
         train_losses = []
         test_losses = []
@@ -54,7 +58,6 @@ class Train(object):
         decrease = 1
         not_improve = 0
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         fit_time = time.time()
         logger.debug(f'Range epochs : {range(epochs)}')
@@ -81,14 +84,15 @@ class Train(object):
                 mask = mask_tiles.to(device)
                 # forward
                 output = model(image)
-                # logger.debug(f'output size: {output.size()}')
-                mask = mask[0, :, :, :].long()
-                # logger.debug(f'mask size {mask.size()}')
+                logger.debug(f'output size: {output.size()}')
+                logger.debug(f'mask size: {mask.size()}')
+                mask = mask[:, 0, :, :].long()
+                logger.debug(f'mask size {mask.size()}')
                 if mask.max() == 0:
                     plt.imshow(mask.squeeze())
                     print(mask)
                     break
-                plt.imshow(mask.squeeze())
+                #plt.imshow(mask.squeeze())
                 loss = criterion(output, mask)
                 logger.debug(f'loss: {loss}')
                 # evaluation metrics
@@ -130,7 +134,7 @@ class Train(object):
                         val_iou_score += mIoU(output, mask)
                         test_accuracy += pixel_accuracy(output, mask)
                         # loss
-                        mask = mask[0, :, :, :].long()
+                        mask = mask[:, 0, :, :].long()
                         loss = criterion(output, mask)
                         test_loss += loss.item()
 
@@ -202,6 +206,7 @@ class Train(object):
 
 
 if __name__ == '__main__':
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     image_path, mask_path = '/Users/celine/Desktop/Thesis/Data/Landsat_images_512/*/*/response.tiff', \
         '/Users/celine/Desktop/Thesis/Data/Maps/vLayers/*.tiff'
     train = Train()
@@ -227,45 +232,68 @@ if __name__ == '__main__':
     train_dataset, val_dataset, test_dataset = train.dataset_split(dataset, [0.7, 0.15, 0.15])
     logger.info(f'Train set: {len(train_dataset)} | Validation set: {len(val_dataset)} '
                 f'| Test set: {len(test_dataset)}')
-    batch_size = 1
-    num_workers = 0
-    pin_memory = True
-    logger.info('Create dataloaders')
-    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, num_workers=num_workers,
-                              pin_memory=pin_memory)
-    val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, num_workers=num_workers,
-                            pin_memory=pin_memory)
-    logger.info('Load architecture with backbone')
 
-    backbone = 'resnet34'
-    encoder_weights = 'imagenet'
-    encoder_depth = 5
-    decoder_channels = [256, 128, 64, 32, 16]
-    in_channels = 10
+    model_id = 0
+    if os.path.exists(f'/Users/celine/burn-severity/model_{model_id}.pt'):
+        print(f'Load model with id {model_id}')
+        model = torch.load(f'/Users/celine/burn-severity/model_{model_id}.pt')
+    else:
+        print(f'Model training')
+        batch_size = 3
+        num_workers = 0
+        pin_memory = True
+        logger.info('Create dataloaders')
+        train_loader = DataLoader(train_dataset, shuffle=True, batch_size=batch_size, num_workers=num_workers,
+                                  pin_memory=pin_memory)
+        val_loader = DataLoader(val_dataset, shuffle=False, batch_size=batch_size, num_workers=num_workers,
+                                pin_memory=pin_memory)
+        logger.info('Load architecture with backbone')
 
-    model = smp.Unet(backbone, encoder_weights=encoder_weights, classes=class_num, activation=None,
-                     encoder_depth=encoder_depth,
-                     decoder_channels=decoder_channels, in_channels=in_channels)
-    max_lr = 1e-3
-    epoch = 5
-    weight_decay = 1e-4
+        backbone = 'resnet34'
+        encoder_weights = 'imagenet'
+        encoder_depth = 5
+        decoder_channels = [256, 128, 64, 32, 16]
+        in_channels = 10
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, weight_decay=weight_decay)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr, epochs=epoch, steps_per_epoch=len(train_loader))
-    logger.info('Train model')
+        model = smp.Unet(backbone, encoder_weights=encoder_weights, classes=class_num, activation=None,
+                         encoder_depth=encoder_depth,
+                         decoder_channels=decoder_channels, in_channels=in_channels)
+        max_lr = 1e-3
+        epoch = 5
+        weight_decay = 1e-4
 
-    """
-    wandb.config.class_num = class_num
-    wandb.config.epochs = epoch
-    wandb.config.batch_size = batch_size
-    wandb.config.in_channels = in_channels
-    wandb.config.backbone = backbone
-    wandb.config.encoder_weights = encoder_weights
-    wandb.config.encoder_depth = encoder_depth
-    wandb.config.decoder_channels = decoder_channels
-    wandb.config.weight_decay = weight_decay
-    wandb.config.max_lr = max_lr
-    """
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.AdamW(model.parameters(), lr=max_lr, weight_decay=weight_decay)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr, epochs=epoch,
+                                                        steps_per_epoch=int(len(train_dataset)/batch_size))
+        logger.info('Train model')
 
-    history = train.fit(epoch, model, train_loader, val_loader, criterion, optimizer, scheduler)
+        """
+        wandb.config.class_num = class_num
+        wandb.config.epochs = epoch
+        wandb.config.batch_size = batch_size
+        wandb.config.in_channels = in_channels
+        wandb.config.backbone = backbone
+        wandb.config.encoder_weights = encoder_weights
+        wandb.config.encoder_depth = encoder_depth
+        wandb.config.decoder_channels = decoder_channels
+        wandb.config.weight_decay = weight_decay
+        wandb.config.max_lr = max_lr
+        """
+
+        history = train.fit(epoch, model, train_loader, val_loader, criterion, optimizer, scheduler, device)
+        torch.save(model, f'/Users/celine/burn-severity/model_{model_id}.pt')
+
+        plot_loss(history)
+        plot_score(history)
+        plot_acc(history)
+
+    predict(model, test_dataset[0], device)
+
+    mob_miou = miou_score(model, test_dataset, device)
+
+    mob_acc = pixel_acc(model, test_dataset, device)
+
+    print('Test Set mIoU', np.mean(mob_miou))
+    print('Test Set Pixel Accuracy', np.mean(mob_acc))
+

@@ -67,6 +67,8 @@ class RandomRotation(object):
         if torch.rand(1) < self.proba:
             if self.random_angle:
                 angle = random.randint(-self.angle, self.angle)
+                if angle == 0.0:
+                    angle += 0.1
             else:
                 angle = self.angle
             image = transform.rotate(image, angle, mode='reflect', preserve_range=True)
@@ -91,6 +93,8 @@ class RandomShear(object):
         if torch.rand(1) < self.proba:
             if self.random_shear:
                 shear = random.randint(-self.shear, self.shear)
+                if shear == 0.0:
+                    shear += 0.1
             else:
                 shear = self.shear
             shear = math.radians(shear)
