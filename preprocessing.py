@@ -133,6 +133,18 @@ class Preprocessing(object):
         mask = mask.squeeze().numpy()
         return mask
 
+    @staticmethod
+    def mask_binary_thresholding_li(mask):
+        mask = torch.Tensor(mask)[:, :, None]
+        mask_np = 1 - mask.squeeze().numpy()
+        histogram = np.histogram(mask_np)[1]
+        logger.debug(f'histogram: {histogram}')
+        threshold = filters.threshold_li(mask_np, initial_guess=filters.threshold_otsu(mask_np, histogram))
+        logger.debug(f'threshold: {threshold}')
+        mask = (1 - mask >= threshold).int()
+        mask = mask.squeeze().numpy()
+        return mask
+
     def mask_thresholding(self, mask, classes: int, index):
         logger.debug(f'classes {classes}, index: {index}')
         if classes == 2:

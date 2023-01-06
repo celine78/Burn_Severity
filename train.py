@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 import segmentation_models_pytorch as smp
+from torchvision import transforms
 from tqdm.notebook import tqdm
 import matplotlib.pyplot as plt
 
@@ -15,7 +16,7 @@ from dataset import SegmentationDataset
 from preprocessing import Preprocessing, Normalize
 from augmentation import DataAugmentation, Compose
 from metrics import mIoU, pixel_accuracy, get_lr, plot_loss, plot_acc, plot_score, predict_image_mask_miou, \
-    miou_score, pixel_acc, predict
+    miou_score, pixel_acc, predict, predict_image_pixel
 
 import logging.config
 import wandb
@@ -209,18 +210,15 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     image_path, mask_path = '/Users/celine/Desktop/Thesis/Data/Landsat_images_512/*/*/response.tiff', \
         '/Users/celine/Desktop/Thesis/Data/Maps/vLayers/*.tiff'
-    train = Train()
-    da = DataAugmentation()
-    p = Preprocessing()
     class_num = 2
     logger.info('Loading dataset')
-    images_dir, masks_dir = p.load_dataset(image_path, mask_path)
+    images_dir, masks_dir = Preprocessing.load_dataset(image_path, mask_path)
     logger.info('Resizing images and masks')
-    images, masks = map(list, zip(*[p.resize(img_dir, mask_dir) for img_dir, mask_dir in zip(images_dir, masks_dir)]))
+    images, masks = map(list, zip(*[Preprocessing.resize(img_dir, mask_dir) for img_dir, mask_dir in zip(images_dir, masks_dir)]))
     logger.info('Data augmentation')
-    images = [p.delete_landsat_bands(image, [9, 12, 13]) for image in images]
-    mean, std = p.get_mean_std(images)
-    vflip, hflip, rota, shear = da.data_augmentation(0.5, 0.5, 0.25, 0.25, 40, 20)
+    images = [Preprocessing.delete_landsat_bands(image, [9, 12, 13]) for image in images]
+    mean, std = Preprocessing.get_mean_std(images)
+    vflip, hflip, rota, shear = DataAugmentation.data_augmentation(0.5, 0.5, 0.25, 0.25, 40, 20)
     #vflip, hflip, rota, shear = da.data_augmentation(1, 1, 1, 1, 40, 20)
     trans = Compose([
         vflip, hflip, rota, shear,
@@ -229,7 +227,7 @@ if __name__ == '__main__':
     logger.info('Create datasets')
     dataset = SegmentationDataset(images, masks, class_num=class_num, transform=trans)
     logger.debug(f'Dataset length: {len(dataset)}')
-    train_dataset, val_dataset, test_dataset = train.dataset_split(dataset, [0.7, 0.15, 0.15])
+    train_dataset, val_dataset, test_dataset = Train.dataset_split(dataset, [0.7, 0.15, 0.15])
     logger.info(f'Train set: {len(train_dataset)} | Validation set: {len(val_dataset)} '
                 f'| Test set: {len(test_dataset)}')
 
@@ -281,12 +279,55 @@ if __name__ == '__main__':
         wandb.config.max_lr = max_lr
         """
 
-        history = train.fit(epoch, model, train_loader, val_loader, criterion, optimizer, scheduler, device)
+        history = Train.fit(epoch, model, train_loader, val_loader, criterion, optimizer, scheduler, device)
         torch.save(model, f'/Users/celine/burn-severity/model_{model_id}.pt')
 
         plot_loss(history)
         plot_score(history)
         plot_acc(history)
+
+    #image, mask = test_dataset[0]
+    import skimage
+    image = skimage.io.imread('/Users/celine/Downloads/response.tiff')
+    image = Preprocessing.resize_image(image)
+    image = Preprocessing.delete_landsat_bands(image, [9, 12, 13])
+    image = torch.from_numpy(image).float()
+    image = image.permute(2, 0, 1)
+    trans = transforms.Compose([
+        transforms.Normalize(torch.Tensor([1166.1479, 990.1230, 860.5953, 818.1750, 2062.4404, 1656.0735,
+                                           1043.4313, 830.8372, 270.5279, 269.8681]),
+                             torch.Tensor([445.0345, 427.1914, 453.4088, 571.3936, 1052.1285, 1009.8184,
+                                           764.5239, 492.1391, 86.5190, 86.3010]))])
+    image = trans(image)
+
+    mask_predicted = model.predict(image.unsqueeze(0))
+    mask_predicted = mask_predicted.squeeze().permute(1, 2, 0)
+    mask_predicted_1 = Preprocessing.mask_binary_thresholding_li(mask_predicted[:, :, 1])
+    mask_predicted_2 = predict_image_pixel(model, image, device)
+
+    data = np.array(mask_predicted[:, :, 1])
+    mask_predicted_transformed = (data - np.min(data)) / (np.max(data) - np.min(data))
+
+    mask_predicted_3 = Preprocessing.mask_binary_thresholding_li(mask_predicted_transformed)
+    mask_predicted_transformed[mask_predicted_transformed < 0.5] = 0
+    mask_predicted_transformed[mask_predicted_transformed >= 0.5] = 1
+
+    fig, ax = plt.subplots(1, 8, figsize=(10, 10))
+    ax[0].imshow(mask_predicted[:, :, 0], cmap='gray')
+    ax[1].imshow(mask_predicted[:, :, 1], cmap='gray')
+    ax[2].imshow(mask_predicted_1, cmap='gray')
+    ax[3].imshow(mask_predicted_2.permute(1, 2, 0)[:, :, 0], cmap='gray') #
+    ax[4].imshow(mask_predicted_2.permute(1, 2, 0)[:, :, 1], cmap='gray')
+    ax[5].imshow(mask_predicted_transformed, cmap='gray')
+    ax[6].imshow(image.permute(1, 2, 0)[:, :, 4])
+    #ax[7].imshow(mask.permute(1, 2, 0))
+    plt.show()
+
+    #print(model.predict(test_dataset[0][0].unsqueeze(0)))
+    #print(model.get_extra_state())
+    #print(model.training)
+
+    """
 
     predict(model, test_dataset[0], device)
 
@@ -297,3 +338,4 @@ if __name__ == '__main__':
     print('Test Set mIoU', np.mean(mob_miou))
     print('Test Set Pixel Accuracy', np.mean(mob_acc))
 
+"""

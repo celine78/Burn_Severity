@@ -26,9 +26,8 @@ class SegmentationDataset(Dataset):
     def __getitem__(self, index):
         image = self.images[index]
         mask = self.masks[index]
-        p = Preprocessing()
         logger.debug(f'image, mask length: {len(image), len(mask)}, Index: {index}')
-        mask = p.mask_thresholding(mask, self.class_num, index)
+        mask = Preprocessing.mask_thresholding(mask, self.class_num, index)
         logger.debug(f'mask shape: {mask.shape}')
         if self.save_masks:
             self.save_mask(mask, self.class_num, index)

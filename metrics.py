@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
+import torch.nn as nn
 
 import logging.config
 
@@ -119,8 +120,13 @@ def predict_image_pixel(model, image, device):
     with torch.no_grad():
         image = image.unsqueeze(0)
         output = model(image.float())
-        masked = torch.argmax(output, dim=1)
+        #masked = torch.argmax(output, dim=1)
+        #masked = torch.sigmoid(output)
+        #masked = torch.round(masked)
+        softmax = nn.Softmax(dim=1)
+        masked = softmax(output)
         masked = masked.cpu().squeeze(0)
+        masked = torch.round(masked)
     return masked
 
 
