@@ -47,7 +47,7 @@ def get_lr(optimizer):
         return param_group['lr']
 
 
-def predict(model, image, device, plot=True):
+def predict(model, image, device, plot=False):
     img, mask = image
     pred_mask, score = predict_image_mask_pixel(model, img, mask, device)
     if plot:
