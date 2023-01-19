@@ -64,7 +64,7 @@ def plot_loss(history):
     plt.show()
 
 
-def plot_score(history):
+def plot_mIoU(history):
     plt.plot(history['train_miou'], label='train_mIoU', marker='*')
     plt.plot(history['val_miou'], label='val_mIoU', marker='*')
     plt.title('Score per epoch')
@@ -116,17 +116,14 @@ def predict_image_mask_miou(model, image, mask, device):
 
 
 def predict_image_pixel(model, image, device):
+    model.eval()
+    model.to(device)
     image = image.to(device)
     with torch.no_grad():
         image = image.unsqueeze(0)
-        output = model(image.float())
-        #masked = torch.argmax(output, dim=1)
-        #masked = torch.sigmoid(output)
-        #masked = torch.round(masked)
-        softmax = nn.Softmax(dim=1)
-        masked = softmax(output)
+        output = model(image)
+        masked = torch.argmax(output, dim=1)
         masked = masked.cpu().squeeze(0)
-        masked = torch.round(masked)
     return masked
 
 

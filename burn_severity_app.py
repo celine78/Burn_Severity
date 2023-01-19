@@ -1,24 +1,25 @@
-import matplotlib.pyplot as plt
-import streamlit as st
-import torch
-from metrics import predict_image_pixel
-from skimage import color
-import skimage
-from preprocessing import Preprocessing, Normalize
-import numpy as np
+import os
 import cv2
-from augmentation import Compose
+import numpy as np
+import torch
+import skimage
+from skimage import color
+import streamlit as st
 from torchvision import transforms
+from metrics import predict_image_pixel
+from preprocessing import Preprocessing
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 st.title("Burn Severity Assessment")
 
-classes = st.select_slider('Select the number levels of burn severity to consider.', options=['1', '3', '4'])
-
-uploaded_file = st.file_uploader('Upload a Landsat satellite image as a TIFF file with 13 bands', type=['TIFF'],
+uploaded_file = st.file_uploader("Upload a Landsat satellite image as a TIFF file with 13 bands "
+                                 "[B01-B11, BQA and DataMask].", type=['TIFF'],
                                  accept_multiple_files=False,
                                  label_visibility="visible")
+
+classes_n = st.select_slider('Select the number of burn severity levels to consider.', options=['2', '4', '5'])
 
 
 def true_colors(image, contrast_value=1.4):
@@ -32,11 +33,19 @@ if uploaded_file is not None:
     with open(name, mode="wb") as f:
         f.write(uploaded_file.read())
     image = skimage.io.imread(name)
+    os.remove(name)
     if image.shape[2] != 13:
         st.warning(f'Unable to process a file with {image.shape[2]} bands.')
     else:
-        model = torch.load('/Users/celine/burn-severity/model_0.pt')
-        # image = skimage.io.imread('/Users/celine/Downloads/response.tiff')
+        if classes_n == '2':
+            model = torch.load('/Users/celine/burn-severity/model_u-Net w backbone_2.pt')
+        elif classes_n == '4':
+            model = torch.load('/Users/celine/burn-severity/model_u-Net w backbone_4.pt')
+        elif classes_n == '5':
+            model = torch.load('/Users/celine/burn-severity/model_u-Net w backbone_5.pt')
+        else:
+            model = None
+            st.warning(f'No model could be found. PLease verify that the model exists and that the path is correct.')
 
         image_resized = Preprocessing.resize_image(image)
         image = Preprocessing.delete_landsat_bands(image_resized, [9, 12, 13])
@@ -49,18 +58,13 @@ if uploaded_file is not None:
                                                764.5239, 492.1391, 86.5190, 86.3010]))])
         image = trans(image)
         mask = predict_image_pixel(model, image, device)
-        # mask = model.predict(image.unsqueeze(0))
-        mask = mask.permute(1, 2, 0)[:, :, 0]
-        # mask = mask.permute(2, 3, 1, 0)[:, :, 1, 0]
-        mask = np.float32(1 - mask)
-        # mask = ((mask - np.min(mask)) / (np.max(mask) - np.min(mask)))*255
-        # mask = mask.astype(np.uint8)
+        mask = np.float32(mask)
         mask = color.gray2rgb(mask)
+        mask = ((mask - np.min(mask)) / (np.max(mask) - np.min(mask)))
         st.image(mask, channels='RGB', caption='Burn Severity of Forest Fire')
 
         mask_255 = mask * 255
         success, mask_encoded = cv2.imencode(".png", mask_255.astype(np.uint8))
-        # success, mask_encoded = cv2.imencode(".png", mask)
         mask_bytes = mask_encoded.tobytes()
         st.download_button('Download the image as a PNG file', mask_bytes, file_name='burn_severity.png',
                            mime='image/png')
