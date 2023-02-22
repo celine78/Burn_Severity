@@ -77,7 +77,7 @@ if uploaded_file is not None:
         st.image(mask_over_image, channels='RGB', clamp=True, caption='Burned area over satellite image')
 
         mask_over_image_edited = (mask_over_image * 150) + 10
-        success, mask_over_image_encoded = cv2.imencode(".png", mask_over_image_edited.astype(np.uint8))
+        _, mask_over_image_encoded = cv2.imencode(".png", mask_over_image_edited.astype(np.uint8))
         mask_over_image_bytes = mask_over_image_encoded.tobytes()
         st.download_button('Download the image as a PNG file', mask_over_image_bytes, file_name='burn_severity.png',
                            mime='image/png')

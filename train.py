@@ -1,10 +1,15 @@
 import time
 import numpy as np
 import torch
-from torch.utils.data import random_split
+from typing import Tuple
+from torch.utils.data import random_split, Subset
 from tqdm.notebook import tqdm
 import configparser
+from typing import Dict, List
+
+from dataset import SegmentationDataset
 from metrics import mIoU, pixel_accuracy, get_lr
+from torch.utils.data import DataLoader
 
 import logging.config
 import wandb
@@ -14,11 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 class Train(object):
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = configparser.ConfigParser()
         self.config.read('configurations.ini')
 
-    def dataset_split(self, dataset, ratio: list):
+    def dataset_split(self, dataset: SegmentationDataset, ratio: List) -> Tuple[Subset, Subset, Subset]:
         train_size = int(ratio[0] * len(dataset))
         val_size = int(ratio[1] * len(dataset))
         test_size = len(dataset) - (train_size + val_size)
@@ -34,7 +39,8 @@ class Train(object):
             train, val = random_split(train_val, [train_size, val_size])
         return train, val, test
 
-    def fit(self, model, train_loader, val_loader, criterion, optimizer, device, scheduler, model_name):
+    def fit(self, model, train_loader: DataLoader, val_loader: DataLoader, criterion, optimizer, device, scheduler,
+            model_name) -> Dict:
         torch.cuda.empty_cache()
         train_losses = []
         test_losses = []

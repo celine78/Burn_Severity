@@ -1,12 +1,10 @@
 import torch
 import torch.nn as nn
 from einops import rearrange
-
-from vit import ViT
-
-#https://github.com/mkara44/transunet_pytorch
+from ___vit import ViT
 
 
+# Source code: https://github.com/mkara44/transunet_pytorch
 class EncoderBottleneck(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1, base_width=64):
         super().__init__()
@@ -86,7 +84,7 @@ class Encoder(nn.Module):
 
         self.vit_img_dim = img_dim // patch_dim
         self.vit = ViT(self.vit_img_dim, out_channels * 8, out_channels * 8,
-                       head_num, mlp_dim, block_num, patch_dim=1, classification=False)
+                       head_num, mlp_dim, block_num, patch_dim=16, classification=False, num_classes=2)
 
         self.conv2 = nn.Conv2d(out_channels * 8, 512, kernel_size=3, stride=1, padding=1)
         self.norm2 = nn.BatchNorm2d(512)
@@ -145,6 +143,7 @@ class TransUNet(nn.Module):
         x = self.decoder(x, x1, x2, x3)
 
         return x
+
 
 """
 if __name__ == '__main__':

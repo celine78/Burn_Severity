@@ -6,6 +6,7 @@ import logging.config
 import configparser
 import numpy as np
 import torch.nn as nn
+from typing import Dict
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
 
@@ -14,6 +15,9 @@ from preprocessing import Preprocessing, Normalize
 from augmentation import DataAugmentation, Compose
 from dataset import SegmentationDataset
 from train import Train
+from ___trans_unet import TransUNet
+from vit_seg_modeling import VisionTransformer as ViT_seg
+from vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from unet import UNet
 
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
@@ -23,13 +27,13 @@ logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 logging.getLogger('matplotlib.pyplot').setLevel(logging.WARNING)
 
 
-def base_train():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def base_train() -> Dict:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     config = configparser.ConfigParser()
     config.read('configurations.ini')
 
     if config.getboolean('WANDB', 'wandbLog'):
-        WANDB_API_KEY = '750ade35afcb71cb11253e643f3ed1509fbd4ddf'
+        WANDB_API_KEY = config.get('WANDB', 'wandbKey')
         subprocess.check_output(['wandb', 'login', WANDB_API_KEY, '--relogin'])
         wandb.init(project="burn-severity")
 
@@ -39,25 +43,28 @@ def base_train():
     logger.info('Resizing images and masks')
     images, masks = map(list, zip(*[Preprocessing.resize(img_dir, mask_dir) for img_dir, mask_dir in
                                     zip(images_dir, masks_dir)]))
+
     logger.info('Data augmentation')
     images = [Preprocessing.delete_landsat_bands(image, json.loads(config.get('DATA', 'deleteBands'))) for image in
               images]
     mean, std = Preprocessing.get_mean_std(images)
+    #min, max = Preprocessing.get_min_max(images)
     vflip, hflip, rota, shear = DataAugmentation.data_augmentation(
         config.getfloat('DATA AUGMENTATION', 'hflipProba'),
         config.getfloat('DATA AUGMENTATION', 'vflipProba'),
         config.getfloat('DATA AUGMENTATION', 'rotatonProba'),
         config.getfloat('DATA AUGMENTATION', 'shearProba'),
-        config.getfloat('DATA AUGMENTATION', 'rotationAngle'),
-        config.getfloat('DATA AUGMENTATION', 'shearAngle'),
+        config.getint('DATA AUGMENTATION', 'rotationAngle'),
+        config.getint('DATA AUGMENTATION', 'shearAngle'),
         config.getboolean('DATA AUGMENTATION', 'randomRotation'),
         config.getboolean('DATA AUGMENTATION', 'randomShear'))
 
-    trans = Compose([vflip, hflip, rota, shear, Normalize(mean, std)])
+    trans = Compose([vflip, hflip, rota, shear, Normalize(mean=mean, std=std)])
 
     logger.info('Create datasets')
     dataset = SegmentationDataset(images, masks, class_num=config.getint('TRAIN', 'classes_n'), transform=trans,
                                   save_masks=config.getboolean('PREPROCESSING', 'saveMasks'))
+
     logger.debug(f'Dataset length: {len(dataset)}')
 
     train = Train()
@@ -97,6 +104,16 @@ def base_train():
     elif config.getboolean('U-NET', 'use_model'):
         model = UNet(config.getint('U-NET', 'in_channels'), config.getint('TRAIN', 'classes_n'))
         model_name = config.get('U-NET', 'name')
+        if config.getboolean('WANDB', 'wandbLog'):
+            wandb.config.model = model_name
+
+    elif config.getboolean('TRANSUNET', 'use_model'):
+        config_vit = CONFIGS_ViT_seg['ViT-B_16']
+        config_vit.n_classes = 2
+        config_vit.n_skip = 0
+        model = ViT_seg(config_vit, img_size=512, num_classes=config_vit.n_classes).to(device)
+        #model.load_from(weights=np.load(config_vit.pretrained_path))
+        model_name = config.get('TRANSUNET', 'name')
         if config.getboolean('WANDB', 'wandbLog'):
             wandb.config.model = model_name
 

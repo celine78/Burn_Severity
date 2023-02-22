@@ -4,6 +4,8 @@ import numpy as np
 from einops import rearrange, repeat
 
 
+# Source code: https://github.com/mkara44/transunet_pytorch
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, embedding_dim, head_num):
         super().__init__()
@@ -133,6 +135,7 @@ class ViT(nn.Module):
         return x
 
 
+"""
 if __name__ == '__main__':
     vit = ViT(img_dim=128,
               in_channels=3,
@@ -143,3 +146,4 @@ if __name__ == '__main__':
               mlp_dim=1024)
     print(sum(p.numel() for p in vit.parameters()))
     print(vit(torch.rand(1, 3, 128, 128)).shape)
+"""
