@@ -10,12 +10,11 @@ from typing import Dict
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
 
-from metrics import miou_score, pixel_acc, plot_loss, plot_acc, plot_mIoU
+from training.metrics import miou_score, pixel_acc, plot_loss, plot_acc, plot_mIoU
 from preprocessing import Preprocessing, Normalize
-from augmentation import DataAugmentation, Compose
-from dataset import SegmentationDataset
-from train import Train
-from ___trans_unet import TransUNet
+from preprocessing.augmentation import DataAugmentation, Compose
+from data.dataset import SegmentationDataset
+from training.train import Train
 from vit_seg_modeling import VisionTransformer as ViT_seg
 from vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from unet import UNet
@@ -139,21 +138,23 @@ def base_train() -> Dict:
         wandb.config.class_num = config.getint('TRAIN', 'classes_n')
         wandb.config.epochs = config.getint('TRAIN', 'epochs')
         wandb.config.batch_size = config.getint('TRAIN', 'batch_size')
-        wandb.config.in_channels = config.getint('U-NET', 'in_channels')
-        wandb.config.backbone = config.get('U-NET W BACKBONE', 'backbone')
-        wandb.config.encoder_weights = config.get('U-NET W BACKBONE', 'encoder_weights')
-        wandb.config.encoder_depth = config.get('U-NET W BACKBONE', 'encoder_depth')
-        wandb.config.decoder_channels = config.get('U-NET W BACKBONE', 'decoder_channel')
         wandb.config.weight_decay = config.getfloat('OPTIMIZER', 'weight_decay')
         wandb.config.max_lr = config.getfloat('OPTIMIZER', 'learning_rate')
         wandb.config.train_set_size = len(train_set)
         wandb.config.val_set_size = len(val_set)
         wandb.config.scheduler = config.getboolean('SCHEDULER', 'use_scheduler')
+        if config.get('U-NET W BACKBONE', 'name') == 'U-Net with backbone':
+            wandb.config.backbone = config.get('U-NET W BACKBONE', 'backbone')
+            wandb.config.encoder_weights = config.get('U-NET W BACKBONE', 'encoder_weights')
+            wandb.config.encoder_depth = config.get('U-NET W BACKBONE', 'encoder_depth')
+            wandb.config.decoder_channels = config.get('U-NET W BACKBONE', 'decoder_channels')
+        if config.get('U-NET W BACKBONE', 'name') == 'U-Net':
+            wandb.config.in_channels = config.getint('U-NET', 'in_channels')
 
     history = train.fit(model, train_loader, val_loader, criterion, optimizer, device, scheduler, model_name)
 
     #model = model.load_state_dict(torch.load(f'/models/model_{model_name}_{config.getint("TRAIN", "classes_n")}_best.pt'))
-    model = torch.load('/Users/celine/burn-severity/model_u-Net w backbone_2.pt')
+    model = torch.load('/models/model_u-Net w backbone_2.pt')
     mob_mIoU = miou_score(model, test_set, device)
     mob_acc = pixel_acc(model, test_set, device)
 

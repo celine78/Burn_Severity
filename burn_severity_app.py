@@ -6,7 +6,7 @@ import skimage
 from skimage import color
 import streamlit as st
 from torchvision import transforms
-from metrics import predict_image_pixel
+from training.metrics import predict_image_pixel
 from preprocessing import Preprocessing
 
 
@@ -38,11 +38,11 @@ if uploaded_file is not None:
         st.warning(f'Unable to process a file with {image.shape[2]} bands.')
     else:
         if classes_n == '2':
-            model = torch.load('/Users/celine/burn-severity/model_u-Net w backbone_2.pt')
+            model = torch.load('/models/model_u-Net w backbone_2.pt')
         elif classes_n == '4':
-            model = torch.load('/Users/celine/burn-severity/model_u-Net w backbone_4.pt')
+            model = torch.load('/models/model_u-Net w backbone_4.pt')
         elif classes_n == '5':
-            model = torch.load('/Users/celine/burn-severity/model_u-Net w backbone_5.pt')
+            model = torch.load('/models/model_u-Net w backbone_5.pt')
         else:
             model = None
             st.warning(f'No model could be found. PLease verify that the model exists and that the path is correct.')

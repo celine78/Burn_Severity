@@ -1,0 +1,17 @@
+einops==0.6.0
+matplotlib==3.6.2
+ml_collections==0.1.1
+numpy==1.24.1
+opencv_contrib_python==4.6.0.66
+pandas==1.5.2
+Pillow==9.4.0
+scikit_image==0.19.3
+scipy==1.10.1
+segmentation_models_pytorch==0.3.1
+streamlit==1.17.0
+torch==1.13.1
+torchvision==0.14.1
+tqdm==4.64.1
+
+wandb~=0.13.7
+scikit-image~=0.19.3
