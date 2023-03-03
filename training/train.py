@@ -8,13 +8,13 @@ import configparser
 from typing import Dict, List
 
 from data.dataset import SegmentationDataset
-from metrics import mIoU, pixel_accuracy, get_lr
+from training.metrics import mIoU, pixel_accuracy, get_lr
 from torch.utils.data import DataLoader
 
 import logging.config
 import wandb
 
-logging.config.fileConfig("../logging.conf", disable_existing_loggers=False)
+#logging.config.fileConfig("../logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 

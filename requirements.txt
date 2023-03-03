@@ -12,6 +12,3 @@ streamlit==1.17.0
 torch==1.13.1
 torchvision==0.14.1
 tqdm==4.64.1
-
-wandb~=0.13.7
-scikit-image~=0.19.3

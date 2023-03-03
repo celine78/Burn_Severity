@@ -16,8 +16,8 @@ import numpy as np
 from torch.nn import CrossEntropyLoss, Dropout, Softmax, Linear, Conv2d, LayerNorm
 from torch.nn.modules.utils import _pair
 from scipy import ndimage
-import vit_seg_configs as configs
-from vit_seg_modeling_resnet_skip import ResNetV2
+import unet.trans_unet.vit_seg_configs as configs
+from unet.trans_unet.vit_seg_modeling_resnet_skip import ResNetV2
 
 # Source code: https://github.com/mkara44/transunet_pytorch
 

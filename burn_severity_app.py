@@ -7,7 +7,7 @@ from skimage import color
 import streamlit as st
 from torchvision import transforms
 from training.metrics import predict_image_pixel
-from preprocessing import Preprocessing
+from utils import Preprocessing
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

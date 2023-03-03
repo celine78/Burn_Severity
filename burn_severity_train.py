@@ -11,13 +11,13 @@ from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
 
 from training.metrics import miou_score, pixel_acc, plot_loss, plot_acc, plot_mIoU
-from preprocessing import Preprocessing, Normalize
-from preprocessing.augmentation import DataAugmentation, Compose
+from utils import Preprocessing, Normalize
+from utils.augmentation import DataAugmentation, Compose
 from data.dataset import SegmentationDataset
 from training.train import Train
-from vit_seg_modeling import VisionTransformer as ViT_seg
-from vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
-from unet import UNet
+from unet.trans_unet.vit_seg_modeling import VisionTransformer as ViT_seg
+from unet.trans_unet.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
+from unet.vanilla_unet.unet_arch import UNet
 
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)

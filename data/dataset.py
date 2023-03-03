@@ -6,12 +6,12 @@ import torch
 from torch.utils.data import Dataset
 from typing import List, Tuple
 
-from preprocessing.augmentation import Compose
-from preprocessing import Preprocessing
+from utils.augmentation import Compose
+from utils import Preprocessing
 
 import logging.config
 
-logging.config.fileConfig('../logging.conf', disable_existing_loggers=False)
+#logging.config.fileConfig('../logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 
