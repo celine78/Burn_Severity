@@ -48,7 +48,7 @@ class Train(object):
         val_acc = []
         train_iou = []
         train_acc = []
-        lowest_loss = 0
+        lowest_loss = 1
         lrs = []
         min_loss = np.inf
         decrease = 1
@@ -82,7 +82,7 @@ class Train(object):
                 loss = criterion(output, mask)
                 logger.debug(f'loss: {loss}')
                 # evaluation metrics
-                iou_score += mIoU(output, mask)
+                iou_score += mIoU(output, mask, n_classes=self.config.getint("TRAIN", "classes_n"))
                 logger.debug(f'iou_score: {iou_score}')
                 accuracy += pixel_accuracy(output, mask)
                 logger.debug(f'accuracy: {accuracy}')
@@ -132,8 +132,9 @@ class Train(object):
 
                 if self.config.getboolean('TRAIN', 'saveModel') and val_loss < lowest_loss:
                     lowest_loss = val_loss
+                    print('Saving model')
                     torch.save(model.state_dict(),
-                               f'/models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
+                               f'/home/celine/Desktop/burn-severity/models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
 
                 # iou
                 val_iou.append(val_iou_score / len(val_loader))
@@ -169,14 +170,15 @@ class Train(object):
                             f'Time: {((time.time() - since) / 60):.2f}m'
                             )
 
-                if (val_loss / len(val_loader)) > min_loss:
+                if self.config.getboolean('TRAIN', 'early_stop') and (val_loss / len(val_loader)) > min_loss:
                     no_improvement += 1
                     min_loss = (val_loss / len(val_loader))
                     print(f'Validation loss did not decreased for {no_improvement} time')
                     logger.info(f'Validation loss did not decreased for {no_improvement} time')
-                    if no_improvement == 10:
-                        print('Training stopped. The validation loss did not decrease for the last 10 times.')
-                        logger.info('Training stopped. The validation loss did not decrease for the last 10 times.')
+                    early_stop = 25
+                    if no_improvement == early_stop:
+                        print(f'Training stopped. The validation loss did not decrease for the last {early_stop} times.')
+                        logger.info(f'Training stopped. The validation loss did not decrease for the last {early_stop} times.')
                         break
 
         history = {'train_loss': train_losses, 'val_loss': test_losses,

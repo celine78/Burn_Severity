@@ -20,7 +20,7 @@ class Preprocessing(object):
     @staticmethod
     def load_dataset(images_path: str, masks_path: str) -> Tuple[List[str], List[str]]:
         masks_dir = [file_names for file_names in glob.glob(masks_path)]
-        aoi_names = [file_name[47:-5] for file_name in masks_dir]
+        aoi_names = [file_name[31:-5] for file_name in masks_dir]
         images_dir = [dir_name for dir_name in glob.glob(images_path) for aoi in aoi_names if aoi in dir_name]
         images_dir.sort()
         masks_dir.sort()
@@ -80,7 +80,7 @@ class Preprocessing(object):
     @staticmethod
     def _mask_multiclass_thresholding(mask: numpy.ndarray, classes: int, index: int) -> numpy.ndarray:
         logger.debug(f'Handling mask with index {index}')
-        csv_data = pd.read_csv('/Users/celine/Desktop/aoi_data.csv', header=0)
+        csv_data = pd.read_csv('/home/celine/Downloads/aoi_data.csv', header=0)
         csv_data = csv_data[csv_data.notna()]
         mask_classes = csv_data['Classes']
         if classes == 4:
