@@ -155,7 +155,8 @@ class Train(object):
 
                 if self.config.getboolean('TRAIN', 'saveModel') and val_loss < lowest_loss:
                     lowest_loss = val_loss
-                    print('Saving model')
+                    logger.info(f'Saving model')
+                    #print('Saving model')
                     torch.save(model.state_dict(),
                                f'/models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
 
