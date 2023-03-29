@@ -27,6 +27,10 @@ logging.getLogger('matplotlib.pyplot').setLevel(logging.WARNING)
 
 
 def base_train() -> Dict:
+    """
+    Base training with hyperparameters definition, dataset preprocessing and training of a model
+    :return: training history
+    """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     config = configparser.ConfigParser()
     config.read('configurations.ini')
@@ -107,9 +111,10 @@ def base_train() -> Dict:
             wandb.config.model = model_name
 
     elif config.getboolean('TRANSUNET', 'use_model'):
-        config_vit = CONFIGS_ViT_seg['ViT-B_16']
-        config_vit.n_classes = 2
-        config_vit.n_skip = 0
+        vit = config.get('TRANSUNET', 'vit')
+        config_vit = CONFIGS_ViT_seg[vit]
+        config_vit.n_classes = config.getint('TRAIN', 'classes_n')
+        config_vit.n_skip = config.getint('TRANSUNET', 'skip_n')
         model = ViT_seg(config_vit, img_size=512, num_classes=config_vit.n_classes).to(device)
         #model.load_from(weights=np.load(config_vit.pretrained_path))
         model_name = config.get('TRANSUNET', 'name')
@@ -143,18 +148,20 @@ def base_train() -> Dict:
         wandb.config.train_set_size = len(train_set)
         wandb.config.val_set_size = len(val_set)
         wandb.config.scheduler = config.getboolean('SCHEDULER', 'use_scheduler')
-        if config.get('U-NET W BACKBONE', 'name') == 'U-Net with backbone':
+        if config.getboolean('U-NET W BACKBONE', 'use_model'):
             wandb.config.backbone = config.get('U-NET W BACKBONE', 'backbone')
             wandb.config.encoder_weights = config.get('U-NET W BACKBONE', 'encoder_weights')
             wandb.config.encoder_depth = config.get('U-NET W BACKBONE', 'encoder_depth')
             wandb.config.decoder_channels = config.get('U-NET W BACKBONE', 'decoder_channels')
-        if config.get('U-NET W BACKBONE', 'name') == 'U-Net':
+        elif config.getboolean('U-NET', 'use_model'):
             wandb.config.in_channels = config.getint('U-NET', 'in_channels')
+        elif config.getboolean('TRANSUNET', 'use_model'):
+            wandb.config.vit = config.get('TRANSUNET', 'vit')
+            wandb.config.skip_num = config.getint('TRANSUNET', 'n_skip')
 
     history = train.fit(model, train_loader, val_loader, criterion, optimizer, device, scheduler, model_name)
 
-    #model = model.load_state_dict(torch.load(f'/models/model_{model_name}_{config.getint("TRAIN", "classes_n")}_best.pt'))
-    model = torch.load('/models/model_u-Net w backbone_2.pt')
+    model = model.load_state_dict(torch.load(f'/models/model_{model_name}_{config.getint("TRAIN", "classes_n")}_best.pt'))
     mob_mIoU = miou_score(model, test_set, device)
     mob_acc = pixel_acc(model, test_set, device)
 

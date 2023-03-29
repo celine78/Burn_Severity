@@ -14,16 +14,27 @@ from torch.utils.data import DataLoader
 import logging.config
 import wandb
 
-#logging.config.fileConfig("../logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 
 class Train(object):
+    """
+    Train the model with a given training dataset
+    """
     def __init__(self) -> None:
+        """
+        Constructor for the training class
+        """
         self.config = configparser.ConfigParser()
         self.config.read('configurations.ini')
 
     def dataset_split(self, dataset: SegmentationDataset, ratio: List) -> Tuple[Subset, Subset, Subset]:
+        """
+        Splits the dataset into training, validation and test sets
+        :param dataset: dataset to split
+        :param ratio: ratio for each set
+        :return: training, validation and test subsets
+        """
         train_size = int(ratio[0] * len(dataset))
         val_size = int(ratio[1] * len(dataset))
         test_size = len(dataset) - (train_size + val_size)
@@ -41,6 +52,18 @@ class Train(object):
 
     def fit(self, model, train_loader: DataLoader, val_loader: DataLoader, criterion, optimizer, device, scheduler,
             model_name) -> Dict:
+        """
+        Fit a model using the given training and validation sets
+        :param model: model to be trained
+        :param train_loader: training set
+        :param val_loader: validation set
+        :param criterion: criterion to be used
+        :param optimizer: optimizer to use
+        :param device: device
+        :param scheduler: scheduler
+        :param model_name: name of the model
+        :return: training history
+        """
         torch.cuda.empty_cache()
         train_losses = []
         test_losses = []
@@ -134,7 +157,7 @@ class Train(object):
                     lowest_loss = val_loss
                     print('Saving model')
                     torch.save(model.state_dict(),
-                               f'/home/celine/Desktop/burn-severity/models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
+                               f'/models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
 
                 # iou
                 val_iou.append(val_iou_score / len(val_loader))
@@ -175,7 +198,7 @@ class Train(object):
                     min_loss = (val_loss / len(val_loader))
                     print(f'Validation loss did not decreased for {no_improvement} time')
                     logger.info(f'Validation loss did not decreased for {no_improvement} time')
-                    early_stop = 25
+                    early_stop = 10
                     if no_improvement == early_stop:
                         print(f'Training stopped. The validation loss did not decrease for the last {early_stop} times.')
                         logger.info(f'Training stopped. The validation loss did not decrease for the last {early_stop} times.')
