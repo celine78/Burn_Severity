@@ -142,13 +142,13 @@ class Train(object):
                         val_loss += loss.item()
 
                 # calculation mean for each batch
-                print('train loader length: ', len(train_loader))
+                #print('train loader length: ', len(train_loader))
                 logger.info(f'train loader length: {len(train_loader)}')
                 train_losses.append(running_loss / len(train_loader))
                 test_losses.append(val_loss / len(val_loader))
 
                 if min_loss > (val_loss / len(val_loader)):
-                    print('Loss Decreasing.. {:.3f} >> {:.3f} '.format(min_loss, (val_loss / len(val_loader))))
+                    #print('Loss Decreasing.. {:.3f} >> {:.3f} '.format(min_loss, (val_loss / len(val_loader))))
                     logger.info(f'Loss Decreasing.. {min_loss:.3f} >> {(val_loss / len(val_loader)):.3f}')
                     min_loss = (val_loss / len(val_loader))
                     decrease += 1
