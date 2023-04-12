@@ -1,6 +1,6 @@
 import cv2
 import glob
-
+import configparser
 import numpy
 import numpy as np
 import pandas as pd
@@ -18,6 +18,8 @@ class Preprocessing(object):
     """
     Preprocessing class with all preprocessing functions
     """
+    config = configparser.ConfigParser()
+    config.read('configurations.ini')
 
     @staticmethod
     def load_dataset(images_path: str, masks_path: str) -> Tuple[List[str], List[str]]:
@@ -28,11 +30,11 @@ class Preprocessing(object):
         :return: list of paths for the images and masks
         """
         masks_paths = [file_names for file_names in glob.glob(masks_path)]
-        aoi_names = [file_name[31:-5] for file_name in masks_path]
+        aoi_names = [file_name[file_name.index('vLayers/')+8:file_name.index('.tiff')] for file_name in masks_paths]
         images_paths = [dir_name for dir_name in glob.glob(images_path) for aoi in aoi_names if aoi in dir_name]
         images_paths.sort()
         masks_paths.sort()
-        logger.debug(f'{len(images_path)} images and {len(masks_path)} masks retrieved')
+        logger.debug(f'{len(images_paths)} images and {len(masks_paths)} masks retrieved')
         logger.info(f'Data loaded with {len(images_paths)} images')
         return images_paths, masks_paths
 
@@ -72,7 +74,7 @@ class Preprocessing(object):
         return image
 
     @staticmethod
-    def _tails_bboxes(image: torch.Tensor, size: int, overlap: int) -> List[List[int]]:
+    def _tails_bboxes(image: np.ndarray, size: int, overlap: float) -> List[List[int]]:
         """
         Compute the bounding boxes of the tiles in the given image
         :param image: image tensor
@@ -80,7 +82,6 @@ class Preprocessing(object):
         :param overlap: overlap between the tiles
         :return: list of bboxes
         """
-        image = torch.Tensor.numpy(image)
         bboxes = []
         y_max = y_min = 0
         overlap = int(overlap * size)
@@ -102,24 +103,42 @@ class Preprocessing(object):
             y_min = y_max - overlap
         return bboxes
 
-    def image_tiling(self, image: torch.Tensor, size: int = 256, overlap: int = 0) -> List[torch.Tensor]:
+    def image_tiling(self, image: np.ndarray, mask: np.ndarray, size: int = 256, overlap: float = 0.0) -> \
+            Tuple[List[np.ndarray], List[np.ndarray]]:
         """
         Tiling of an image with a given tile size and overlap
-        :param image: image to tail
+        :param mask: mask to tile
+        :param image: image to tile
         :param size: tile size
         :param overlap: overlap between the tiles
         :return: list of tiles
         """
         bboxes = self._tails_bboxes(image, size, overlap)
         bboxes.sort()
-        tiles = []
-        logger.debug("Tiles number of image", len(bboxes))
-        for bbox in bboxes:
+        tiles_image = []
+        tiles_mask = []
+        for i, bbox in enumerate(bboxes):
             xmin, ymin, xmax, ymax = bbox
-            tile = image[xmin:xmax, ymin:ymax]
-            tile = torch.Tensor(tile)
-            tiles.append(tile)
-        return tiles
+            tile_image = image[xmin:xmax, ymin:ymax]
+            tile_mask = mask[xmin:xmax, ymin:ymax]
+            _, counts = np.unique(tile_mask, return_counts=True)
+            not_burned = counts[0] / (256 * 256)
+            if not_burned < self.config.getfloat('PREPROCESSING', 'tiling_threshold'):
+                tiles_image.append(tile_image)
+                tiles_mask.append(tile_mask)
+            else:
+                tiles_image.append(np.zeros((256, 256, 10)))
+                tiles_mask.append(np.zeros((256, 256)))
+        return tiles_image, tiles_mask
+
+    def remove_landsat_bands(self, image, channels: List[int]):
+        bands = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        if len(set(channels) - set(bands)) != 0: print(
+            f'Band(s) {set(channels) - set(bands)} are not part of Landsat 8&9')
+        channels.sort(reverse=True)
+        for c in channels:
+            image = np.delete(image, c - 1, axis=2)
+        return image
 
     @staticmethod
     def get_mean_std(images: List[numpy.ndarray]) -> Tuple[torch.Tensor, torch.Tensor]:

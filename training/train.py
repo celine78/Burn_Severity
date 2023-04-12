@@ -87,68 +87,71 @@ class Train(object):
             running_loss = 0
             iou_score = 0
             accuracy = 0
-            # training loop
             model.train()
-            logger.debug(f'tqdm(train_loader): {tqdm(train_loader)}')
-            for i, data in enumerate(tqdm(train_loader)):
+            logger.info(f'train_loader: {train_loader}')
+            for data in train_loader:
                 logger.debug(f'data length: {len(data)}')
-                # training phase
                 image_train, mask_train = data
-                image = image_train.to(device)
-                mask = mask_train.to(device)
-                # forward
-                output = model(image)
-                logger.debug(f'output size: {output.size()}')
-                logger.debug(f'mask size: {mask.size()}')
-                mask = mask[:, 0, :, :].long()
-                logger.debug(f'mask size {mask.size()}')
-                loss = criterion(output, mask)
-                logger.debug(f'loss: {loss}')
-                # evaluation metrics
-                iou_score += mIoU(output, mask, n_classes=self.config.getint("TRAIN", "classes_n"))
-                logger.debug(f'iou_score: {iou_score}')
-                accuracy += pixel_accuracy(output, mask)
-                logger.debug(f'accuracy: {accuracy}')
-                # backward
-                loss.backward()
-                optimizer.step()  # update weight
-                optimizer.zero_grad()  # reset gradient
+                for img, msk in zip(image_train, mask_train):
+                    logger.debug(f'img length: {len(img)}')
+                    unique, counts = np.unique(img, return_counts=True)
+                    if len(unique) == 1:
+                        continue
+                    image = img.to(device)
+                    mask = msk.to(device)
+                    # forward
+                    output = model(image)
+                    logger.debug(f'output size: {output.size()}')
+                    logger.debug(f'mask size: {mask.size()}')
+                    mask = mask[:, 0, :, :].long()
+                    logger.debug(f'mask size {mask.size()}')
+                    loss = criterion(output, mask)
+                    logger.debug(f'loss: {loss}')
+                    # evaluation metrics
+                    iou_score += mIoU(output, mask, n_classes=self.config.getint("TRAIN", "classes_n"))
+                    logger.debug(f'iou_score: {iou_score}')
+                    accuracy += pixel_accuracy(output, mask)
+                    logger.debug(f'accuracy: {accuracy}')
+                    # backward
+                    loss.backward()
+                    optimizer.step()  # update weight
+                    optimizer.zero_grad()  # reset gradient
 
-                # step the learning rate
-                lrs.append(get_lr(optimizer))
-                if scheduler is not None:
-                    scheduler.step()
-                    print(f'Learning rate in epoch {epoch}: ', scheduler.get_last_lr())
-                    logger.debug(f'Learning rate in epoch {epoch}: {scheduler.get_last_lr()}')
-                running_loss += loss.item()
+                    # step the learning rate
+                    lrs.append(get_lr(optimizer))
+                    if scheduler is not None:
+                        scheduler.step()
+                        print(f'Learning rate in epoch {epoch}: ', scheduler.get_last_lr())
+                        logger.debug(f'Learning rate in epoch {epoch}: {scheduler.get_last_lr()}')
+                    running_loss += loss.item()
             else:
                 model.eval()
                 val_loss = 0
                 val_accuracy = 0
                 val_iou_score = 0
-                # validation loop
                 with torch.no_grad():
-                    for i, data in enumerate(tqdm(val_loader)):
+                    for data in val_loader:
                         image_val, mask_val = data
-                        image = image_val.to(device)
-                        mask = mask_val.to(device)
-                        output = model(image)
-                        # evaluation metrics
-                        val_iou_score += mIoU(output, mask)
-                        val_accuracy += pixel_accuracy(output, mask)
-                        # loss
-                        mask = mask[:, 0, :, :].long()
-                        loss = criterion(output, mask)
-                        val_loss += loss.item()
+                        for img, msk in zip(image_val, mask_val):
+                            image = img.to(device)
+                            mask = msk.to(device)
+                            output = model(image)
+                            # evaluation metrics
+                            val_iou_score += mIoU(output, mask)
+                            val_accuracy += pixel_accuracy(output, mask)
+                            # loss
+                            mask = mask[:, 0, :, :].long()
+                            loss = criterion(output, mask)
+                            val_loss += loss.item()
 
                 # calculation mean for each batch
-                #print('train loader length: ', len(train_loader))
+                # print('train loader length: ', len(train_loader))
                 logger.info(f'train loader length: {len(train_loader)}')
                 train_losses.append(running_loss / len(train_loader))
                 test_losses.append(val_loss / len(val_loader))
 
                 if min_loss > (val_loss / len(val_loader)):
-                    #print('Loss Decreasing.. {:.3f} >> {:.3f} '.format(min_loss, (val_loss / len(val_loader))))
+                    # print('Loss Decreasing.. {:.3f} >> {:.3f} '.format(min_loss, (val_loss / len(val_loader))))
                     logger.info(f'Loss Decreasing.. {min_loss:.3f} >> {(val_loss / len(val_loader)):.3f}')
                     min_loss = (val_loss / len(val_loader))
                     decrease += 1
@@ -156,7 +159,7 @@ class Train(object):
                 if self.config.getboolean('TRAIN', 'saveModel') and val_loss < lowest_loss:
                     lowest_loss = val_loss
                     logger.info(f'Saving model')
-                    #print('Saving model')
+                    # print('Saving model')
                     torch.save(model.state_dict(),
                                f'/models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
 
@@ -201,8 +204,8 @@ class Train(object):
                     logger.info(f'Validation loss did not decreased for {no_improvement} time')
                     early_stop = 10
                     if no_improvement == early_stop:
-                        print(f'Training stopped. The validation loss did not decrease for the last {early_stop} times.')
-                        logger.info(f'Training stopped. The validation loss did not decrease for the last {early_stop} times.')
+                        print(f'Training stopped. Validation loss did not decrease for the last {early_stop} times.')
+                        logger.info(f'Training stopped. No validation loss in the last {early_stop} times.')
                         break
 
         history = {'train_loss': train_losses, 'val_loss': test_losses,

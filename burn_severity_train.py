@@ -66,6 +66,7 @@ def base_train() -> Dict:
 
     logger.info('Create datasets')
     dataset = SegmentationDataset(images, masks, class_num=config.getint('TRAIN', 'classes_n'), transform=trans,
+                                  tiling=config.getboolean('PREPROCESSING', 'tiling'),
                                   save_masks=config.getboolean('PREPROCESSING', 'saveMasks'))
 
     logger.debug(f'Dataset length: {len(dataset)}')
@@ -115,8 +116,8 @@ def base_train() -> Dict:
         config_vit = CONFIGS_ViT_seg[vit]
         config_vit.n_classes = config.getint('TRAIN', 'classes_n')
         config_vit.n_skip = config.getint('TRANSUNET', 'skip_n')
-        model = ViT_seg(config_vit, img_size=512, num_classes=config_vit.n_classes).to(device)
-        #model.load_from(weights=np.load(config_vit.pretrained_path))
+        model = ViT_seg(config_vit, img_size=256, num_classes=config_vit.n_classes).to(device)
+        model.load_from(weights=np.load(config_vit.pretrained_path))
         model_name = config.get('TRANSUNET', 'name')
         if config.getboolean('WANDB', 'wandbLog'):
             wandb.config.model = model_name
@@ -158,6 +159,7 @@ def base_train() -> Dict:
         elif config.getboolean('TRANSUNET', 'use_model'):
             wandb.config.vit = config.get('TRANSUNET', 'vit')
             wandb.config.skip_num = config.getint('TRANSUNET', 'n_skip')
+            wandb.config.backbone = config.get('TRANSUNET', 'backbone')
 
     history = train.fit(model, train_loader, val_loader, criterion, optimizer, device, scheduler, model_name)
 

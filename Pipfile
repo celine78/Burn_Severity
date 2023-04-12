@@ -17,7 +17,7 @@ segmentation-models-pytorch = "==0.3.1"
 streamlit = "==1.17.0"
 torch = "==1.13.1"
 torchvision = "==0.14.1"
-tqdm = "==4.64.1"
+tqdm = "~=4.64.1"
 wandb = "~=0.13.10"
 
 [dev-packages]

@@ -17,7 +17,7 @@ def get_b16_config():
     config.classifier = 'seg'
     config.representation_size = None
     config.resnet_pretrained_path = None
-    config.pretrained_path = 'ViT-B_16.npz'
+    config.pretrained_path = '/Users/celine/burn-severity/unet/trans_unet/ViT-B_16.npz'
     config.patch_size = 16
 
     config.decoder_channels = (256, 128, 64, 16)
