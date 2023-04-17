@@ -41,17 +41,37 @@ def base_train() -> Dict:
         wandb.init(project="burn-severity")
 
     logger.info('Loading dataset')
-    images_dir, masks_dir = Preprocessing.load_dataset(config.get('DATA', 'imagesPath'),
-                                                       config.get('DATA', 'masksPath'))
+    prep = Preprocessing()
+    images_dir, masks_dir = prep.load_dataset(config.get('DATA', 'imagesPath'), config.get('DATA', 'masksPath'))
     logger.info('Resizing images and masks')
-    images, masks = map(list, zip(*[Preprocessing.resize(img_dir, mask_dir) for img_dir, mask_dir in
+    images, masks = map(list, zip(*[prep.resize(img_dir, mask_dir) for img_dir, mask_dir in
                                     zip(images_dir, masks_dir)]))
 
-    logger.info('Data augmentation')
-    images = [Preprocessing.delete_landsat_bands(image, json.loads(config.get('DATA', 'deleteBands'))) for image in
+    if config.getboolean('PREPROCESSING', 'tiling'):
+        logger.info('Tiling images and masks')
+        images, masks = map(list, zip(*[prep.image_tiling(img, msk, 256, 0.2) for img, msk in zip(images, masks)]))
+        num_tiles = len(images[0])
+        images = prep.flatten_list(images)
+        masks = prep.flatten_list(masks)
+        logger.info('Thresholding masks')
+        masks = [prep.mask_thresholding(mask, config.getint('TRAIN', 'classes_n'), index=i, tiles=True,
+                                        num_tiles=num_tiles) for i, mask in enumerate(masks)]
+
+        if config.getboolean('PREPROCESSING', 'filter_tiles'):
+            logger.info('Filtering tiles')
+            images, masks = prep.filter_masks(images, masks)
+    else:
+        masks = [prep.mask_thresholding(mask, config.getint('TRAIN', 'classes_n'), index=i, tiles=False)
+                 for i, mask in enumerate(masks)]
+
+    logger.info('Removing Satellite bands')
+    images = [prep.delete_landsat_bands(image, json.loads(config.get('DATA', 'deleteBands'))) for image in
               images]
-    mean, std = Preprocessing.get_mean_std(images)
-    #min, max = Preprocessing.get_min_max(images)
+
+    logger.info('Data augmentation init')
+
+    mean, std = prep.get_mean_std(images)
+    # min, max = Preprocessing.get_min_max(images)
     vflip, hflip, rota, shear = DataAugmentation.data_augmentation(
         config.getfloat('DATA AUGMENTATION', 'hflipProba'),
         config.getfloat('DATA AUGMENTATION', 'vflipProba'),
@@ -65,19 +85,18 @@ def base_train() -> Dict:
     trans = Compose([vflip, hflip, rota, shear, Normalize(mean=mean, std=std)])
 
     logger.info('Create datasets')
+
     dataset = SegmentationDataset(images, masks, class_num=config.getint('TRAIN', 'classes_n'), transform=trans,
-                                  tiling=config.getboolean('PREPROCESSING', 'tiling'),
                                   save_masks=config.getboolean('PREPROCESSING', 'saveMasks'))
 
     logger.debug(f'Dataset length: {len(dataset)}')
 
     train = Train()
     train_set, val_set, test_set = train.dataset_split(dataset, ratio=json.loads(
-                                                                        config.get('TRAIN', 'trainValTestRatio')))
+        config.get('TRAIN', 'trainValTestRatio')))
 
     logger.info(f'Train set: {len(train_set)} | Validation set: {len(val_set)} | Test set: {len(test_set)}')
 
-    print(f'Model training')
     logger.info('Create dataloaders')
     train_loader = DataLoader(train_set, shuffle=True, batch_size=config.getint('TRAIN', 'batch_size'),
                               num_workers=config.getint('TRAIN', 'num_workers'),
@@ -116,7 +135,7 @@ def base_train() -> Dict:
         config_vit = CONFIGS_ViT_seg[vit]
         config_vit.n_classes = config.getint('TRAIN', 'classes_n')
         config_vit.n_skip = config.getint('TRANSUNET', 'skip_n')
-        model = ViT_seg(config_vit, img_size=256, num_classes=config_vit.n_classes).to(device)
+        model = ViT_seg(config_vit, img_size=config.getint('TRAIN', 'input_size'), num_classes=config_vit.n_classes).to(device)
         model.load_from(weights=np.load(config_vit.pretrained_path))
         model_name = config.get('TRANSUNET', 'name')
         if config.getboolean('WANDB', 'wandbLog'):
@@ -163,7 +182,8 @@ def base_train() -> Dict:
 
     history = train.fit(model, train_loader, val_loader, criterion, optimizer, device, scheduler, model_name)
 
-    model = model.load_state_dict(torch.load(f'/models/model_{model_name}_{config.getint("TRAIN", "classes_n")}_best.pt'))
+    # model = model.load_state_dict(
+    #    torch.load(f'/models/model_{model_name}_{config.getint("TRAIN", "classes_n")}_best.pt'))
     mob_mIoU = miou_score(model, test_set, device)
     mob_acc = pixel_acc(model, test_set, device)
 
@@ -187,4 +207,3 @@ if __name__ == '__main__':
         plot_loss(history)
         plot_acc(history)
         plot_mIoU(history)
-

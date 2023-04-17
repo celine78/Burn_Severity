@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
-from tqdm.notebook import tqdm
 from torch.utils.data import Subset
 
 import logging.config
@@ -52,7 +51,6 @@ def mIoU(pred_mask: torch.Tensor, mask: torch.Tensor, smooth: float = 1e-10, n_c
             else:
                 intersect = torch.logical_and(true_class, true_label).sum().float().item()
                 union = torch.logical_or(true_class, true_label).sum().float().item()
-
                 iou = (intersect + smooth) / (union + smooth)
                 iou_per_class.append(iou)
         return np.nanmean(iou_per_class)
@@ -224,7 +222,7 @@ def miou_score(model, test_set: Subset, device: torch.device) -> List[numpy.ndar
     :return: mean intersection over union score
     """
     score_iou = []
-    for i in tqdm(range(len(test_set))):
+    for i in range(len(test_set)):
         img, mask = test_set[i]
         pred_mask, score = predict_image_mask_miou(model, img, mask, device)
         score_iou.append(score)
@@ -240,7 +238,7 @@ def pixel_acc(model, test_set: Subset, device: torch.device) -> List[float]:
     :return: accuracy score
     """
     accuracy = []
-    for i in tqdm(range(len(test_set))):
+    for i in range(len(test_set)):
         img, mask = test_set[i]
         pred_mask, acc = predict_image_mask_pixel(model, img, mask, device)
         accuracy.append(acc)

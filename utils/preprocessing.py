@@ -8,18 +8,20 @@ from PIL import Image
 from skimage import color, filters, io
 import torch
 from typing import List, Tuple
+import matplotlib.pyplot as plt
 
 import logging.config
 
 logger = logging.getLogger(__name__)
+
+config = configparser.ConfigParser()
+config.read('configurations.ini')
 
 
 class Preprocessing(object):
     """
     Preprocessing class with all preprocessing functions
     """
-    config = configparser.ConfigParser()
-    config.read('configurations.ini')
 
     @staticmethod
     def load_dataset(images_path: str, masks_path: str) -> Tuple[List[str], List[str]]:
@@ -30,7 +32,7 @@ class Preprocessing(object):
         :return: list of paths for the images and masks
         """
         masks_paths = [file_names for file_names in glob.glob(masks_path)]
-        aoi_names = [file_name[file_name.index('vLayers/')+8:file_name.index('.tiff')] for file_name in masks_paths]
+        aoi_names = [file_name[file_name.index('vLayers/') + 8:file_name.index('.tiff')] for file_name in masks_paths]
         images_paths = [dir_name for dir_name in glob.glob(images_path) for aoi in aoi_names if aoi in dir_name]
         images_paths.sort()
         masks_paths.sort()
@@ -121,14 +123,15 @@ class Preprocessing(object):
             xmin, ymin, xmax, ymax = bbox
             tile_image = image[xmin:xmax, ymin:ymax]
             tile_mask = mask[xmin:xmax, ymin:ymax]
+            tiles_image.append(tile_image)
+            tiles_mask.append(tile_mask)
+            """
             _, counts = np.unique(tile_mask, return_counts=True)
             not_burned = counts[0] / (256 * 256)
             if not_burned < self.config.getfloat('PREPROCESSING', 'tiling_threshold'):
                 tiles_image.append(tile_image)
                 tiles_mask.append(tile_mask)
-            else:
-                tiles_image.append(np.zeros((256, 256, 10)))
-                tiles_mask.append(np.zeros((256, 256)))
+            """
         return tiles_image, tiles_mask
 
     def remove_landsat_bands(self, image, channels: List[int]):
@@ -172,7 +175,8 @@ class Preprocessing(object):
         return min_value, max_value
 
     @staticmethod
-    def _mask_multiclass_thresholding(mask: numpy.ndarray, classes: int, index: int) -> numpy.ndarray:
+    def _mask_multiclass_thresholding(mask: numpy.ndarray, classes: int, index: int, tiles: bool, num_tiles: int) -> \
+            numpy.ndarray:
         """
         Thresholding of a mask into multi classes using information provided by a CSV file
         :param mask: mask
@@ -180,8 +184,11 @@ class Preprocessing(object):
         :param index: index of the mask
         :return: pixel-wise classified mask
         """
+        if tiles:
+            if not isinstance(num_tiles, int): raise ValueError
+            index = int(index / num_tiles)
         logger.debug(f'Handling mask with index {index}')
-        csv_data = pd.read_csv('/home/celine/Downloads/aoi_data.csv', header=0)
+        csv_data = pd.read_csv(config.get('DATA', 'csvPath'), header=0)
         csv_data = csv_data[csv_data.notna()]
         mask_classes = csv_data['Classes']
         if classes == 4:
@@ -193,7 +200,7 @@ class Preprocessing(object):
         else:
             merge = None
             classification = None
-            print('Number of classes not supported')
+            logger.debug('Number of classes not supported')
 
         logger.debug(f'Merge: {merge}, classification: {classification}')
 
@@ -260,20 +267,43 @@ class Preprocessing(object):
         mask = mask.squeeze().numpy()
         return mask
 
-    def mask_thresholding(self, mask: numpy.ndarray, classes: int, index: int) -> numpy.ndarray:
+    def mask_thresholding(self, mask: numpy.ndarray, classes: int, index: int, tiles: bool, num_tiles: int = None) -> \
+            numpy.ndarray:
         """
         Threshold a mask in a given number of classes
+        :param num_tiles: number of tiles per image
+        :param tiles: image tiles or not
         :param mask: mask
         :param classes: number of classes
         :param index: index of the mask
         :return: pixel-wise classified mask
         """
-        logger.debug(f'classes {classes}, index: {index}')
+        logger.debug(f'classes {classes}, index: {index}, tiles: {tiles}, number of tiles: {num_tiles}')
         if classes == 2:
             mask = self._mask_binary_thresholding(mask)
         else:
-            mask = self._mask_multiclass_thresholding(mask, classes, index)
+            mask = self._mask_multiclass_thresholding(mask, classes, index, tiles, num_tiles)
         return mask
+
+    @staticmethod
+    def filter_masks(images: List[numpy.ndarray], masks: List[numpy.ndarray]) -> \
+            Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
+        images_filtered = []
+        masks_filtered = []
+        for image, mask in zip(images, masks):
+            _, counts = np.unique(mask, return_counts=True)
+            input_size = config.getint('TRAIN', 'input_size')
+            not_burned = counts[0] / (input_size * input_size)
+            if not_burned < config.getfloat('PREPROCESSING', 'tiling_threshold'):
+                images_filtered.append(image)
+                masks_filtered.append(mask)
+        logger.info(f'Dataset length: {len(images_filtered)}')
+        return images_filtered, masks_filtered
+
+    @staticmethod
+    def flatten_list(ll_img: List[List[numpy.ndarray]]) -> List[numpy.ndarray]:
+        l_img = [img for image in ll_img for img in image]
+        return l_img
 
     @staticmethod
     def delete_landsat_bands(image: numpy.ndarray, channels: List[int]) -> numpy.ndarray:

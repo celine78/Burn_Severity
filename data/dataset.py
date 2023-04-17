@@ -1,6 +1,5 @@
 import os
 import glob
-
 import numpy
 import torch
 from torch.utils.data import Dataset
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class SegmentationDataset(Dataset):
     def __init__(self, images: List[numpy.ndarray], masks: List[numpy.ndarray], class_num: int = None,
-                 transform: Compose = None, tiling: bool = False, save_masks: bool = False) -> None:
+                 transform: Compose = None, save_masks: bool = False) -> None:
         """
         A dataset class which preprocesses and augments the data for training purposes using
         :param images: satellite images
@@ -25,7 +24,8 @@ class SegmentationDataset(Dataset):
         :param transform: transformations to perform
         :param save_masks: whether to save the masks
         """
-        self.tiling = tiling
+        # self.tiling = tiling
+        # self.num_tiles = num_tiles
         self.images = images
         self.masks = masks
         self.class_num = class_num
@@ -39,7 +39,7 @@ class SegmentationDataset(Dataset):
         """
         return len(self.images)
 
-    def __getitem__(self, index: int) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Preprocesses and augments an image and its mask
         :param index: index of the image and mask
@@ -48,27 +48,20 @@ class SegmentationDataset(Dataset):
         image = self.images[index]
         mask = self.masks[index]
         logger.debug(f'image, mask length: {len(image), len(mask)}, Index: {index}')
-        prep = Preprocessing()
-        mask = prep.mask_thresholding(mask, self.class_num, index)
-        logger.debug(f'mask shape: {mask.shape}')
+        # prep = Preprocessing()
+        # mask = prep.mask_thresholding(mask, self.class_num, index, self.tiling, self.num_tiles)
         if self.save_masks:
             self.save_mask(mask, self.class_num, index)
-        if self.tiling:
-            image, mask = prep.image_tiling(image, mask, 256, 0.2)
-            logger.debug(f'Image tiles size: {len(image)}')
-            logger.debug(f'Mask tiles size: {len(mask)}')
-        else:
-            image = [image]
-            mask = [mask]
         if self.transform is not None:
-            image, mask = map(list, zip(*[self.transform(img, msk) for img, msk in zip(image, mask)]))
-            image = [img.permute(2, 0, 1) for img in image]
-            logger.debug(f'Image tiles: {image[0].size()}')
+            # image, mask = zip(*[self.transform(img, msk) for img, msk in zip(image, mask)])
+            image, mask = self.transform(image, mask)
+            # image = [img.permute(2, 0, 1) for img in image]
+            image = image.permute(2, 0, 1)
+            # logger.debug(f'Image tiles: {image[0].size()}')
         else:
-            for img in image:
-                image = torch.Tensor(img)
-                image = image.permute(2, 0, 1)
-            mask = [torch.Tensor(msk) for msk in mask]
+            image = torch.Tensor(image)
+            image = image.permute(2, 0, 1)
+            mask = torch.Tensor(mask)
         return image, mask
 
     @classmethod

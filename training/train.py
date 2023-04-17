@@ -2,8 +2,9 @@ import time
 import numpy as np
 import torch
 from typing import Tuple
+
+from matplotlib import pyplot as plt
 from torch.utils.data import random_split, Subset
-from tqdm.notebook import tqdm
 import configparser
 from typing import Dict, List
 
@@ -89,41 +90,37 @@ class Train(object):
             accuracy = 0
             model.train()
             logger.info(f'train_loader: {train_loader}')
+            # Batch training
             for data in train_loader:
                 logger.debug(f'data length: {len(data)}')
-                image_train, mask_train = data
-                for img, msk in zip(image_train, mask_train):
-                    logger.debug(f'img length: {len(img)}')
-                    unique, counts = np.unique(img, return_counts=True)
-                    if len(unique) == 1:
-                        continue
-                    image = img.to(device)
-                    mask = msk.to(device)
-                    # forward
-                    output = model(image)
-                    logger.debug(f'output size: {output.size()}')
-                    logger.debug(f'mask size: {mask.size()}')
-                    mask = mask[:, 0, :, :].long()
-                    logger.debug(f'mask size {mask.size()}')
-                    loss = criterion(output, mask)
-                    logger.debug(f'loss: {loss}')
-                    # evaluation metrics
-                    iou_score += mIoU(output, mask, n_classes=self.config.getint("TRAIN", "classes_n"))
-                    logger.debug(f'iou_score: {iou_score}')
-                    accuracy += pixel_accuracy(output, mask)
-                    logger.debug(f'accuracy: {accuracy}')
-                    # backward
-                    loss.backward()
-                    optimizer.step()  # update weight
-                    optimizer.zero_grad()  # reset gradient
+                img, msk = data
+                image = img.to(device)
+                mask = msk.to(device)
+                # forward
+                output = model(image)
+                logger.debug(f'output size: {output.size()}')
+                logger.debug(f'mask size: {mask.size()}')
+                mask = mask[:, 0, :, :].long()
+                logger.debug(f'mask size {mask.size()}')
+                loss = criterion(output, mask)
+                logger.debug(f'loss: {loss}')
+                # evaluation metrics
+                iou_score += mIoU(output, mask, n_classes=self.config.getint("TRAIN", "classes_n"))
+                logger.debug(f'iou_score: {iou_score}')
+                accuracy += pixel_accuracy(output, mask)
+                logger.debug(f'accuracy: {accuracy}')
+                # backward
+                loss.backward()
+                optimizer.step()  # update weight
+                optimizer.zero_grad()  # reset gradient
 
-                    # step the learning rate
-                    lrs.append(get_lr(optimizer))
-                    if scheduler is not None:
-                        scheduler.step()
-                        print(f'Learning rate in epoch {epoch}: ', scheduler.get_last_lr())
-                        logger.debug(f'Learning rate in epoch {epoch}: {scheduler.get_last_lr()}')
-                    running_loss += loss.item()
+                # step the learning rate
+                lrs.append(get_lr(optimizer))
+                if scheduler is not None:
+                    scheduler.step()
+                    print(f'Learning rate in epoch {epoch}: ', scheduler.get_last_lr())
+                    logger.debug(f'Learning rate in epoch {epoch}: {scheduler.get_last_lr()}')
+                running_loss += loss.item()
             else:
                 model.eval()
                 val_loss = 0
@@ -131,18 +128,17 @@ class Train(object):
                 val_iou_score = 0
                 with torch.no_grad():
                     for data in val_loader:
-                        image_val, mask_val = data
-                        for img, msk in zip(image_val, mask_val):
-                            image = img.to(device)
-                            mask = msk.to(device)
-                            output = model(image)
-                            # evaluation metrics
-                            val_iou_score += mIoU(output, mask)
-                            val_accuracy += pixel_accuracy(output, mask)
-                            # loss
-                            mask = mask[:, 0, :, :].long()
-                            loss = criterion(output, mask)
-                            val_loss += loss.item()
+                        img, msk = data
+                        image = img.to(device)
+                        mask = msk.to(device)
+                        output = model(image)
+                        # evaluation metrics
+                        val_iou_score += mIoU(output, mask)
+                        val_accuracy += pixel_accuracy(output, mask)
+                        # loss
+                        mask = mask[:, 0, :, :].long()
+                        loss = criterion(output, mask)
+                        val_loss += loss.item()
 
                 # calculation mean for each batch
                 # print('train loader length: ', len(train_loader))
@@ -163,7 +159,6 @@ class Train(object):
                     torch.save(model.state_dict(),
                                f'/models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
 
-                # iou
                 val_iou.append(val_iou_score / len(val_loader))
                 train_iou.append(iou_score / len(train_loader))
                 train_acc.append(accuracy / len(train_loader))
