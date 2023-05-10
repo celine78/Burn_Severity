@@ -48,21 +48,15 @@ def base_train() -> Dict:
                                     zip(images_dir, masks_dir)]))
 
     if config.getboolean('PREPROCESSING', 'tiling'):
+        logger.info('Thresholding masks')
+        masks = [prep.mask_thresholding(mask, config.getint('TRAIN', 'classes_n'), i) for i, mask in enumerate(masks)]
         logger.info('Tiling images and masks')
         images, masks = map(list, zip(*[prep.image_tiling(img, msk, 256, 0.2) for img, msk in zip(images, masks)]))
-        num_tiles = len(images[0])
         images = prep.flatten_list(images)
         masks = prep.flatten_list(masks)
-        logger.info('Thresholding masks')
-        masks = [prep.mask_thresholding(mask, config.getint('TRAIN', 'classes_n'), index=i, tiles=True,
-                                        num_tiles=num_tiles) for i, mask in enumerate(masks)]
-
         if config.getboolean('PREPROCESSING', 'filter_tiles'):
             logger.info('Filtering tiles')
             images, masks = prep.filter_masks(images, masks)
-    else:
-        masks = [prep.mask_thresholding(mask, config.getint('TRAIN', 'classes_n'), index=i, tiles=False)
-                 for i, mask in enumerate(masks)]
 
     logger.info('Removing Satellite bands')
     images = [prep.delete_landsat_bands(image, json.loads(config.get('DATA', 'deleteBands'))) for image in
@@ -167,7 +161,14 @@ def base_train() -> Dict:
         wandb.config.max_lr = config.getfloat('OPTIMIZER', 'learning_rate')
         wandb.config.train_set_size = len(train_set)
         wandb.config.val_set_size = len(val_set)
+        wandb.config.train_val_test_ratio = config.get('TRAIN', 'trainValTestRatio')
         wandb.config.scheduler = config.getboolean('SCHEDULER', 'use_scheduler')
+        wandb.config.hflipProba = config.getfloat('DATA AUGMENTATION', 'hflipProba')
+        wandb.config.vflipProba = config.getfloat('DATA AUGMENTATION', 'vflipProba')
+        wandb.config.rotatonProba = config.getfloat('DATA AUGMENTATION', 'rotatonProba')
+        wandb.config.shearProba = config.getfloat('DATA AUGMENTATION', 'shearProba')
+        if config.getboolean('PREPROCESSING', 'tiling'):
+            wandb.config.tiles_threshold = config.getfloat('PREPROCESSING', 'tiling_threshold')
         if config.getboolean('U-NET W BACKBONE', 'use_model'):
             wandb.config.backbone = config.get('U-NET W BACKBONE', 'backbone')
             wandb.config.encoder_weights = config.get('U-NET W BACKBONE', 'encoder_weights')

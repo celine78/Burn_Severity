@@ -157,7 +157,7 @@ class Train(object):
                     logger.info(f'Saving model')
                     # print('Saving model')
                     torch.save(model.state_dict(),
-                               f'/models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
+                               f'models/model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
 
                 val_iou.append(val_iou_score / len(val_loader))
                 train_iou.append(iou_score / len(train_loader))

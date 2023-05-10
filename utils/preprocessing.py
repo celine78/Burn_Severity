@@ -175,7 +175,7 @@ class Preprocessing(object):
         return min_value, max_value
 
     @staticmethod
-    def _mask_multiclass_thresholding(mask: numpy.ndarray, classes: int, index: int, tiles: bool, num_tiles: int) -> \
+    def _mask_multiclass_thresholding(mask: numpy.ndarray, classes: int, index: int) -> \
             numpy.ndarray:
         """
         Thresholding of a mask into multi classes using information provided by a CSV file
@@ -184,9 +184,6 @@ class Preprocessing(object):
         :param index: index of the mask
         :return: pixel-wise classified mask
         """
-        if tiles:
-            if not isinstance(num_tiles, int): raise ValueError
-            index = int(index / num_tiles)
         logger.debug(f'Handling mask with index {index}')
         csv_data = pd.read_csv(config.get('DATA', 'csvPath'), header=0)
         csv_data = csv_data[csv_data.notna()]
@@ -206,30 +203,30 @@ class Preprocessing(object):
 
         mask_np = 1 - mask.squeeze()
         histogram = np.histogram(mask_np)[1]
-        logger.debug(f'Histogram: {histogram}')
+        # logger.debug(f'Histogram: {histogram}')
         thresholds = filters.threshold_multiotsu(mask_np, int(mask_classes[index]), histogram)
-        logger.debug(f'Thresholds: {thresholds}')
+        # logger.debug(f'Thresholds: {thresholds}')
         mask = np.digitize(mask_np, bins=thresholds)
-        logger.debug(f'mMask: {mask}')
-        pre, nm1 = np.unique(mask, return_counts=True)
-        logger.debug(f'pre: {pre}, nm1: {nm1}')
+        # logger.debug(f'mMask: {mask}')
+        uniques, counts = np.unique(mask, return_counts=True)
+        logger.debug(f'uniques: {uniques}, counts: {counts}')
         if classes == 4 and isinstance(merge[index], str):
-            cl = merge[index].split(',')
-            logger.debug(f'cl {cl}')
-            mask[mask == int(cl[0])] = int(cl[1])
-        logger.debug(f'Mask: {mask}')
+            classes_pre = merge[index].split(',')
+            logger.debug(f'Classes pre-modification {classes_pre}')
+            mask[mask == int(classes_pre[0])] = int(classes_pre[1])
+        # logger.debug(f'Mask: {mask}')
         new_classes = classification[index].split(',')
         logger.debug(f'New classes: {new_classes}')
         new_classes.reverse()
         for new_value, old_value in zip(new_classes, np.unique(mask)[::-1]):
             mask[mask == old_value] = int(new_value)
-        post, nm2 = np.unique(mask, return_counts=True)
-        logger.debug(f'Pre: {pre}, post: {post}')
-        logger.debug(f'nm1: {nm1}, nm2: {nm2}')
-        if len(pre) != len(post) and not isinstance(merge[index], str):
-            logger.debug(f'unique pre {pre}')
-            logger.debug(f'unique post {post}')
-            logger.debug(f'nm1, nm2 {nm1, nm2}')
+        post_uniques, post_counts = np.unique(mask, return_counts=True)
+        logger.debug(f'pre: {uniques}, post: {post_uniques}')
+        # logger.debug(f'nm1: {nm1}, nm2: {nm2}')
+        if len(uniques) != len(post_uniques) and not isinstance(merge[index], str):
+            logger.debug(f'unique pre {uniques}')
+            logger.debug(f'unique post {post_uniques}')
+            logger.debug(f'nm1, nm2 {counts, post_counts}')
         # mask = torch.Tensor(mask)[:,:,None]
         return mask
 
@@ -267,22 +264,20 @@ class Preprocessing(object):
         mask = mask.squeeze().numpy()
         return mask
 
-    def mask_thresholding(self, mask: numpy.ndarray, classes: int, index: int, tiles: bool, num_tiles: int = None) -> \
+    def mask_thresholding(self, mask: numpy.ndarray, classes: int, index: int) -> \
             numpy.ndarray:
         """
         Threshold a mask in a given number of classes
-        :param num_tiles: number of tiles per image
-        :param tiles: image tiles or not
         :param mask: mask
         :param classes: number of classes
-        :param index: index of the mask
+        :param index: index of mask
         :return: pixel-wise classified mask
         """
-        logger.debug(f'classes {classes}, index: {index}, tiles: {tiles}, number of tiles: {num_tiles}')
+        logger.debug(f'classes {classes}')
         if classes == 2:
             mask = self._mask_binary_thresholding(mask)
         else:
-            mask = self._mask_multiclass_thresholding(mask, classes, index, tiles, num_tiles)
+            mask = self._mask_multiclass_thresholding(mask, classes, index)
         return mask
 
     @staticmethod
