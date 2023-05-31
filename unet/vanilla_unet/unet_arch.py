@@ -1,10 +1,12 @@
+# This file implements the U-Net architecture as described in the article "U-Net: Convolutional Networks for Biomedical
+# Image Segmentation" by Olaf Ronneberger, Philipp Fischer, and Thomas Brox.
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import logging.config
 
-#logging.config.fileConfig('../../logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
 # Source code: https://github.com/milesial/Pytorch-UNet/blob/master/unet/unet_parts.py

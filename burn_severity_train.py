@@ -1,3 +1,8 @@
+# This python file is the main entry point for the training of the model. The base train function takes care of the
+# initialization before loading, preprocessing, augmenting and splitting the dataset. The model is also chosen and its
+# hyperparameters are set. All the configurations can be set in the configurations.ini file. After the training, the
+# model is being evaluated on the test set. If wandb is not enabled, the training results are being plot.
+
 import wandb
 import torch
 import json
@@ -129,7 +134,9 @@ def base_train() -> Dict:
         config_vit = CONFIGS_ViT_seg[vit]
         config_vit.n_classes = config.getint('TRAIN', 'classes_n')
         config_vit.n_skip = config.getint('TRANSUNET', 'skip_n')
-        model = ViT_seg(config_vit, img_size=config.getint('TRAIN', 'input_size'), num_classes=config_vit.n_classes).to(device)
+        # BEWARE: in the case of image tilling, the input_size needs to be modified
+        model = ViT_seg(config_vit, img_size=config.getint('TRAIN', 'input_size'),
+                        num_classes=config_vit.n_classes).to(device)
         model.load_from(weights=np.load(config_vit.pretrained_path))
         model_name = config.get('TRANSUNET', 'name')
         if config.getboolean('WANDB', 'wandbLog'):

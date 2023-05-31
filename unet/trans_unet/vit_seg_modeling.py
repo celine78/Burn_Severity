@@ -1,3 +1,7 @@
+# This file implements the TransUnet architecture and has been created by the authors of the original paper
+# "TransUNet: Transformers Make Strong Encoders for Medical Image Segmentation" Jieneng Chen, Yongyi Lu, Qihang Yu,
+# Xiangde Luo, Ehsan Adeli, Yan Wang, Le Lu, Alan L. Yuille, and Yuyin Zhou
+
 # coding=utf-8
 from __future__ import absolute_import
 from __future__ import division

@@ -1,3 +1,12 @@
+# In this class, the model is trained and evaluated. This class contains two methods.
+# In the first method, the dataset is split into a training set, an evaluation set and a test set. The ratio for the
+# splitting is determined in the configuration found in the configuration file configurations.ini. A seed parameter for
+# the validation and the test sets are determined to ensure reproducibility. A value of -1 is used in this case to
+# indicate that the random split should not be deterministic.
+# The second method fits the data to the model. The training uses pytorch and is evaluated using the methods in the
+# metrics.py file. The results are logged in wandb, if enabled. An optimizer, a scheduler and a criterion can be given
+# as parameters. An early stopping is possible, if enabled in the configuration.
+
 import time
 import numpy as np
 import torch
@@ -42,11 +51,13 @@ class Train(object):
         test_seed = self.config.getint('TRAIN', 'testSeed')
         val_seed = self.config.getint('TRAIN', 'valSeed')
         if test_seed != -1:
-            train_val, test = random_split(dataset, [(train_size + val_size), test_size], torch.manual_seed(test_seed))
+            generator = torch.manual_seed(test_seed)
+            train_val, test = random_split(dataset, [(train_size + val_size), test_size], generator=generator)
         else:
             train_val, test = random_split(dataset, [(train_size + val_size), test_size])
         if val_seed != -1:
-            train, val = random_split(train_val, [train_size, val_size], torch.manual_seed(val_seed))
+            generator = torch.manual_seed(test_seed)
+            train, val = random_split(train_val, [train_size, val_size], generator=generator)
         else:
             train, val = random_split(train_val, [train_size, val_size])
         return train, val, test
@@ -60,12 +71,11 @@ class Train(object):
         :param val_loader: validation set
         :param criterion: criterion to be used
         :param optimizer: optimizer to use
-        :param device: device
-        :param scheduler: scheduler
+        :param device: cpu or cuda device
+        :param scheduler: scheduler to use
         :param model_name: name of the model
         :return: training history
         """
-        torch.cuda.empty_cache()
         train_losses = []
         test_losses = []
         val_iou = []

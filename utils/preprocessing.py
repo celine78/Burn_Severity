@@ -1,3 +1,22 @@
+# This file contains tow main classes.
+# The Preprocessing class implements the functions used for the preprocessing of the satellite images and the masks.
+#   Functions:
+#   load_dataset: gets the dataset paths and orders the data
+#   resize: resizes the dataset to 512x512
+#   resize_image: resizes a satellite image to 512x512
+#   image_tiling: creates tiles of a given size for each image. An overlap of the tiles with a given ratio is supported
+#   get_mean_std: get the mean and standard deviation of the images
+#   get_min_max: get the min and max values of the images
+#   mask_thresholding: binary or multiclass thresholding of the masks using the Otsu method. The multiclass thresholding
+#   can use four or five different classes. When four classes are specified, some merging needs to be done beforehand.
+#   More information about the merging can be found in the documentation of the project. The information about the
+#   merging is provided by a locally stored CSV file.
+#   mask_binary_thresholding_li: binary thresholding using the Li method
+#   filter_masks: filter out images and masks where the ratio of burned pixels is lower than the threshold
+#   flatten_masks: filter a list of lists of images
+#   delete_landsat_bands: removes certain bands from the satellite images
+# The Normalization class normalizes the images batch-wise using the min/max or the mean/unit variance
+
 import cv2
 import glob
 import configparser
@@ -20,7 +39,7 @@ config.read('configurations.ini')
 
 class Preprocessing(object):
     """
-    Preprocessing class with all preprocessing functions
+    Preprocessing class with all preprocessing functions, such as loading, resizing, tiling or thresholding of masks
     """
 
     @staticmethod
@@ -134,15 +153,6 @@ class Preprocessing(object):
             """
         return tiles_image, tiles_mask
 
-    def remove_landsat_bands(self, image, channels: List[int]):
-        bands = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-        if len(set(channels) - set(bands)) != 0: print(
-            f'Band(s) {set(channels) - set(bands)} are not part of Landsat 8&9')
-        channels.sort(reverse=True)
-        for c in channels:
-            image = np.delete(image, c - 1, axis=2)
-        return image
-
     @staticmethod
     def get_mean_std(images: List[numpy.ndarray]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -178,7 +188,7 @@ class Preprocessing(object):
     def _mask_multiclass_thresholding(mask: numpy.ndarray, classes: int, index: int) -> \
             numpy.ndarray:
         """
-        Thresholding of a mask into multi classes using information provided by a CSV file
+        Thresholding of a mask into multi-classes using information provided by a CSV file
         :param mask: mask
         :param classes: number of classes
         :param index: index of the mask
@@ -221,12 +231,11 @@ class Preprocessing(object):
         for new_value, old_value in zip(new_classes, np.unique(mask)[::-1]):
             mask[mask == old_value] = int(new_value)
         post_uniques, post_counts = np.unique(mask, return_counts=True)
-        logger.debug(f'pre: {uniques}, post: {post_uniques}')
-        # logger.debug(f'nm1: {nm1}, nm2: {nm2}')
+        logger.debug(f'pre uniques: {uniques}, post uniques: {post_uniques}')
         if len(uniques) != len(post_uniques) and not isinstance(merge[index], str):
             logger.debug(f'unique pre {uniques}')
             logger.debug(f'unique post {post_uniques}')
-            logger.debug(f'nm1, nm2 {counts, post_counts}')
+            logger.debug(f'counts pre, counts post {counts, post_counts}')
         # mask = torch.Tensor(mask)[:,:,None]
         return mask
 
@@ -283,6 +292,12 @@ class Preprocessing(object):
     @staticmethod
     def filter_masks(images: List[numpy.ndarray], masks: List[numpy.ndarray]) -> \
             Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
+        """
+        Only consider images which contain a percentage of burned area. Other images are filtered out.
+        :param images: images to filter
+        :param masks: masks to filter
+        :return: images and masks filtered
+        """
         images_filtered = []
         masks_filtered = []
         for image, mask in zip(images, masks):
@@ -297,6 +312,11 @@ class Preprocessing(object):
 
     @staticmethod
     def flatten_list(ll_img: List[List[numpy.ndarray]]) -> List[numpy.ndarray]:
+        """
+        Flatten a list of lists
+        :param ll_img: list of lists
+        :return: flatten list
+        """
         l_img = [img for image in ll_img for img in image]
         return l_img
 

@@ -1,3 +1,8 @@
+# This class implements the metrics for the evaluation of the training and evaluation of the model. The methods include
+# the scores for accuracy and mean over intersection (mIoU). A further method gets the learning rate from the optimizer.
+# Four methods can be used to plot the accuracy, the mIoU, the loss and the prediction.
+
+
 from typing import Dict, Tuple, List
 
 import numpy
@@ -78,70 +83,6 @@ def predict(model, image: torch.Tensor, device: torch.device, plot: bool = False
     pred_mask, score = predict_image_mask_pixel(model, img, mask, device)
     if plot:
         plot_predictions(img, mask, pred_mask, score)
-
-
-def plot_loss(history: Dict) -> None:
-    """
-    Plot the loss function
-    :param history: the training history
-    """
-    plt.plot(history['val_loss'], label='val', marker='o')
-    plt.plot(history['train_loss'], label='train', marker='o')
-    plt.title('Loss per epoch')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(), plt.grid()
-    plt.show()
-
-
-def plot_mIoU(history: Dict) -> None:
-    """
-    Plot the mean intersection of union
-    :param history: the training history
-    """
-    plt.plot(history['train_mIoU'], label='train_mIoU', marker='*')
-    plt.plot(history['val_mIoU'], label='val_mIoU', marker='*')
-    plt.title('Score per epoch')
-    plt.ylabel('mean IoU')
-    plt.xlabel('epoch')
-    plt.legend(), plt.grid()
-    plt.show()
-
-
-def plot_acc(history: Dict) -> None:
-    """
-    Plot the accuracy
-    :param history: the training history
-    """
-    plt.plot(history['train_acc'], label='train_accuracy', marker='*')
-    plt.plot(history['val_acc'], label='val_accuracy', marker='*')
-    plt.title('Accuracy per epoch')
-    plt.ylabel('Accuracy')
-    plt.xlabel('epoch')
-    plt.legend(), plt.grid()
-    plt.show()
-
-
-def plot_predictions(image: torch.Tensor, mask: torch.Tensor, pred_mask: torch.Tensor, score: float) -> None:
-    """
-    Plot the image with the predicted mask and the ground truth
-    :param image: image predicted
-    :param mask: ground truth mask
-    :param pred_mask: predicted mask
-    :param score: accuracy score
-    """
-    fig, ax = plt.subplots(1, 3, figsize=(20, 10))
-    ax[0].imshow(image[4, :, :])
-    ax[0].set_title('Picture')
-
-    ax[1].imshow(mask.squeeze())
-    ax[1].set_title('Ground truth')
-    ax[1].set_axis_off()
-
-    ax[2].imshow(pred_mask.squeeze())
-    ax[2].set_title('UNet-Burn Severity | accuracy {:.3f}'.format(score))
-    ax[2].set_axis_off()
-    plt.show()
 
 
 def predict_image_mask_miou(model, image: torch.Tensor, mask: torch.Tensor, device: torch.device) -> \
@@ -243,3 +184,66 @@ def pixel_acc(model, test_set: Subset, device: torch.device) -> List[float]:
         pred_mask, acc = predict_image_mask_pixel(model, img, mask, device)
         accuracy.append(acc)
     return accuracy
+
+def plot_loss(history: Dict) -> None:
+    """
+    Plot the loss function
+    :param history: the training history
+    """
+    plt.plot(history['val_loss'], label='val', marker='o')
+    plt.plot(history['train_loss'], label='train', marker='o')
+    plt.title('Loss per epoch')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(), plt.grid()
+    plt.show()
+
+
+def plot_mIoU(history: Dict) -> None:
+    """
+    Plot the mean intersection of union
+    :param history: the training history
+    """
+    plt.plot(history['train_mIoU'], label='train_mIoU', marker='*')
+    plt.plot(history['val_mIoU'], label='val_mIoU', marker='*')
+    plt.title('Score per epoch')
+    plt.ylabel('mean IoU')
+    plt.xlabel('epoch')
+    plt.legend(), plt.grid()
+    plt.show()
+
+
+def plot_acc(history: Dict) -> None:
+    """
+    Plot the accuracy
+    :param history: the training history
+    """
+    plt.plot(history['train_acc'], label='train_accuracy', marker='*')
+    plt.plot(history['val_acc'], label='val_accuracy', marker='*')
+    plt.title('Accuracy per epoch')
+    plt.ylabel('Accuracy')
+    plt.xlabel('epoch')
+    plt.legend(), plt.grid()
+    plt.show()
+
+
+def plot_predictions(image: torch.Tensor, mask: torch.Tensor, pred_mask: torch.Tensor, score: float) -> None:
+    """
+    Plot the image with the predicted mask and the ground truth
+    :param image: image predicted
+    :param mask: ground truth mask
+    :param pred_mask: predicted mask
+    :param score: accuracy score
+    """
+    fig, ax = plt.subplots(1, 3, figsize=(20, 10))
+    ax[0].imshow(image[4, :, :])
+    ax[0].set_title('Picture')
+
+    ax[1].imshow(mask.squeeze())
+    ax[1].set_title('Ground truth')
+    ax[1].set_axis_off()
+
+    ax[2].imshow(pred_mask.squeeze())
+    ax[2].set_title('UNet-Burn Severity | accuracy {:.3f}'.format(score))
+    ax[2].set_axis_off()
+    plt.show()

@@ -1,3 +1,8 @@
+# This file contains the classes for the data augmentation. The data can be flipped horizontally or vertically, rotated
+# a certain angle or warped with a certain angle. For the rotation and warping methods, the angle can also be chosen
+# randomly within a min and max angle provided. A probability can be given for the application of the methods.
+# The class compose transforms the images and the masks.
+
 import random
 import math
 import numpy

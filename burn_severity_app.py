@@ -1,3 +1,6 @@
+# This file creates a low-code application using streamlit. A satellite image from Landsat can be given as input.
+# The image will be predicted by the model and displayed bellow. A prediction for 2, 4 or 5 classes can be chosen.
+
 import os
 import cv2
 import numpy as np

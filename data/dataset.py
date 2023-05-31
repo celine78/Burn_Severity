@@ -1,3 +1,5 @@
+# This class creates a dataset object and transforms the data batch-wise during the training.
+
 import os
 import glob
 import numpy
@@ -17,7 +19,7 @@ class SegmentationDataset(Dataset):
     def __init__(self, images: List[numpy.ndarray], masks: List[numpy.ndarray], class_num: int = None,
                  transform: Compose = None, save_masks: bool = False) -> None:
         """
-        A dataset class which preprocesses and augments the data for training purposes using
+        Initializes a dataset with the data, the number of classes to segment and the transformation to use
         :param images: satellite images
         :param masks: masks
         :param class_num: number of classes
