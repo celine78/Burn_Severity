@@ -14,6 +14,7 @@ import torch.nn as nn
 from typing import Dict
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
+from torchmetrics import JaccardIndex, Accuracy
 
 from training.metrics import miou_score, pixel_acc, plot_loss, plot_acc, plot_mIoU
 from utils import Preprocessing, Normalize
@@ -104,6 +105,10 @@ def base_train() -> Dict:
                             num_workers=config.getint('TRAIN', 'num_workers'),
                             pin_memory=config.getboolean('TRAIN', 'pin_memory'))
 
+    test_loader = DataLoader(test_set, shuffle=False, batch_size=config.getint('TRAIN', 'batch_size'),
+                             num_workers=config.getint('TRAIN', 'num_workers'),
+                             pin_memory=config.getboolean('TRAIN', 'pin_memory'))
+
     logger.info('Load model architecture')
 
     model_name = ''
@@ -188,22 +193,46 @@ def base_train() -> Dict:
             wandb.config.skip_num = config.getint('TRANSUNET', 'n_skip')
             wandb.config.backbone = config.get('TRANSUNET', 'backbone')
 
-    history = train.fit(model, train_loader, val_loader, criterion, optimizer, device, scheduler, model_name)
+    history, model = train.fit(model, train_loader, val_loader, criterion, optimizer, device, scheduler, model_name)
 
+    number_classes = config.getint('TRAIN', 'classes_n')
+    task = "binary" if number_classes == 2 else "multiclass"
+    jaccard = JaccardIndex(task=task, num_classes=number_classes)
+    accuracy = Accuracy(task=task, num_classes=number_classes)
+    # cm = ConfusionMatrix(task=task, num_classes=number_classes)
     # model = model.load_state_dict(
     #    torch.load(f'/models/model_{model_name}_{config.getint("TRAIN", "classes_n")}_best.pt'))
-    mob_mIoU = miou_score(model, test_set, device)
-    mob_acc = pixel_acc(model, test_set, device)
+    test_iou = 0
+    test_acc = 0
+    test_loss = 0
+    y_pred = []
+    y_true = []
+    model.eval()
+    with torch.no_grad():
+        for data in test_loader:
+            img, msk = data
+            image = img.to(device)
+            mask = msk.to(device)
+            mask = mask[:, 0, :, :].long()
+            y_true.extend(mask)
+            output = model(image)
+            output = (torch.max(torch.exp(output), 1)[1]).data.cpu().numpy()
+            y_pred.extend(output)
+            test_iou += jaccard(output, mask)
+            test_acc += accuracy(output, mask)
+            loss = criterion(output, mask)
+            test_loss += loss.item()
 
     if config.getboolean('WANDB', 'wandbLog'):
-        wandb.log({"Test mIoU": np.mean(mob_mIoU),
-                   "Test accuracy": np.mean(mob_acc)
+        wandb.log({"Test IoU": test_iou / len(test_loader),
+                   "Test accuracy": test_acc / len(test_loader),
+                   "Test loss": test_loss / len(test_loader)
                    })
 
-    logger.info(f'Test set mIoU: {np.mean(mob_mIoU)}')
-    logger.info(f'Test set Pixel Accuracy: {np.mean(mob_acc)}')
-    print('Test set mIoU', np.mean(mob_mIoU))
-    print('Test set Pixel Accuracy', np.mean(mob_acc))
+    logger.info(f'Test IoU: {test_iou / len(test_loader)}')
+    logger.info(f'Test Accuracy: {test_acc / len(test_loader)}')
+    print('Test IoU', test_iou / len(test_loader))
+    print('Test Accuracy', test_acc / len(test_loader))
     return history
 
 
