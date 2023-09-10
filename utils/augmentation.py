@@ -13,7 +13,7 @@ from typing import List, Tuple
 
 import logging.config
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('burn_severity')
 
 
 class RandomVflip(object):

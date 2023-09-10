@@ -11,20 +11,21 @@ import time
 import numpy as np
 import torch
 from typing import Tuple, Any
-from matplotlib import pyplot as plt
 from torch.utils.data import random_split, Subset
 import configparser
-from typing import Dict, List
+from typing import List
+from tqdm import tqdm
+from datetime import datetime
 
 from data.dataset import SegmentationDataset
 from training.metrics import get_lr
 from torch.utils.data import DataLoader
-from torchmetrics import JaccardIndex, Accuracy, AveragePrecision, Dice, F1Score, Precision, Recall, ROC
+from torchmetrics import JaccardIndex, Accuracy, AveragePrecision, Dice, F1Score, Precision, Recall, ROC, AUROC
 
 import logging.config
 import wandb
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('burn_severity')
 
 
 class Train(object):
@@ -67,7 +68,7 @@ class Train(object):
             model_name) -> tuple[dict, Any]:
         """
         Fit a model using the given training and validation sets
-        :param model: model to be trained
+        :param model: model to train
         :param train_loader: training set
         :param val_loader: validation set
         :param criterion: criterion to be used
@@ -84,7 +85,8 @@ class Train(object):
         train_f1 = []
         train_precision = []
         train_recall = []
-        train_roc = []
+        train_auroc = []
+
         val_acc = []
         val_iou = []
         val_ap = []
@@ -92,10 +94,11 @@ class Train(object):
         val_f1 = []
         val_precision = []
         val_recall = []
-        val_roc = []
+        val_auroc = []
+
         train_losses = []
         val_losses = []
-        lowest_loss = 1
+        lowest_loss = np.inf
         lrs = []
         min_loss = np.inf
         decrease = 1
@@ -107,7 +110,7 @@ class Train(object):
         logger.debug(f'Range epochs : {range(epochs)}')
         for epoch in range(epochs):
             logger.debug(f'Epoch e : {epoch}')
-            since = time.time()
+            start = time.time()
             train_loss = 0
             train_iou_score = 0
             train_acc_score = 0
@@ -116,7 +119,7 @@ class Train(object):
             train_f1_score = 0
             train_precision_score = 0
             train_recall_score = 0
-            train_roc_score = 0
+            train_auroc_score = 0
             number_classes = self.config.getint("TRAIN", "classes_n")
             task = "binary" if number_classes == 2 else "multiclass"
             jaccard = JaccardIndex(task=task, num_classes=number_classes)
@@ -126,11 +129,10 @@ class Train(object):
             f1 = F1Score(task=task, num_classes=number_classes)
             precision = Precision(task=task, num_classes=number_classes)
             recall = Recall(task=task, num_classes=number_classes)
-            roc = ROC(task=task, num_classes=number_classes)
+            auroc = AUROC(task=task, num_classes=number_classes)
             model.train()
-            logger.info(f'train_loader: {train_loader}')
             # Batch training
-            for data in train_loader:
+            for data in tqdm(train_loader):
                 logger.debug(f'data length: {len(data)}')
                 img, msk = data
                 image = img.to(device)
@@ -145,17 +147,22 @@ class Train(object):
                 loss = criterion(output, mask)
                 logger.debug(f'loss: {loss}')
                 # evaluation metrics
-                #train_iou_score += jaccard(output, mask)
-                #logger.debug(f'train_iou_score: {train_iou_score}')
                 prediction = torch.argmax(output, dim=1)
+                train_iou_score += jaccard(prediction, mask)
                 train_acc_score += accuracy(prediction, mask)
-                logger.debug(f'accuracy: {train_acc_score}')
-                #train_ap_score += ap(output, mask)
+                if number_classes == 2:
+                    preds = torch.amax(output, dim=1)
+                    train_ap_score += ap(preds, mask)
+                    train_auroc_score += auroc(preds, mask)
+                else:
+                    train_ap_score += ap(output, mask)
+                    train_auroc_score += auroc(output, mask)
+
                 train_dice_score += dice(prediction, mask)
                 train_f1_score += f1(prediction, mask)
                 train_precision_score += precision(prediction, mask)
                 train_recall_score += recall(prediction, mask)
-                #train_roc_score += roc(prediction, mask)
+
                 # backward
                 loss.backward()
                 optimizer.step()  # update weight
@@ -178,133 +185,167 @@ class Train(object):
                 val_f1_score = 0
                 val_precision_score = 0
                 val_recall_score = 0
-                val_roc_score = 0
+                val_auroc_score = 0
+
                 with torch.no_grad():
-                    for data in val_loader:
+                    for data in tqdm(val_loader):
                         img, msk = data
                         image = img.to(device)
                         mask = msk.to(device)
                         output = model(image)
                         mask = mask[:, 0, :, :].long()
                         prediction = torch.argmax(output, dim=1)
-                        # evaluation metrics
-                        #val_iou_score += jaccard(output, mask)
+                        val_iou_score += jaccard(prediction, mask)
                         val_acc_score += accuracy(prediction, mask)
-                        #val_ap_score += ap(output, mask)
+                        if number_classes == 2:
+                            preds = torch.amax(output, dim=1)
+                            val_ap_score += ap(preds, mask)
+                            val_auroc_score += auroc(preds, mask)
+                        else:
+                            val_ap_score += ap(output, mask)
+                            val_auroc_score += auroc(output, mask)
+
                         val_dice_score += dice(prediction, mask)
                         val_f1_score += f1(prediction, mask)
                         val_precision_score += precision(prediction, mask)
                         val_recall_score += recall(prediction, mask)
-                        #val_roc_score += roc(output, mask)
-                        # loss
+
                         loss = criterion(output, mask)
                         val_loss += loss.item()
 
-                # calculation mean for each batc
-                # print('train loader length: ', len(train_loader))
                 logger.info(f'train loader length: {len(train_loader)}')
-                train_losses.append(train_loss / len(train_loader))
-                val_losses.append(val_loss / len(val_loader))
+                train_loss_mean = train_loss / len(train_loader)
+                val_loss_mean = val_loss / len(val_loader)
+                train_losses.append(train_loss_mean)
+                val_losses.append(val_loss_mean)
 
-                if min_loss > (val_loss / len(val_loader)):
-                    # print('Loss Decreasing.. {:.3f} >> {:.3f} '.format(min_loss, (val_loss / len(val_loader))))
-                    logger.info(f'Loss Decreasing.. {min_loss:.3f} >> {(val_loss / len(val_loader)):.3f}')
-                    min_loss = (val_loss / len(val_loader))
+                if min_loss > val_loss_mean:
+                    # print('Loss Decreasing.. {:.3f} >> {:.3f} '.format(min_loss, val_loss_mean))
+                    logger.info(f'Loss Decreasing.. {min_loss:.3f} >> {val_loss_mean:.3f}')
+                    min_loss = val_loss_mean
                     decrease += 1
 
                 if self.config.getboolean('TRAIN', 'saveModel') and val_loss < lowest_loss:
                     lowest_loss = val_loss
                     logger.info(f'Saving model')
                     # print('Saving model')
-                    torch.save(model.state_dict(),
-                               f'models/Landsat_L1_model_{model_name}_{self.config.getint("TRAIN", "classes_n")}_best.pt')
+                    torch.save(model,
+                               f'models/Landsat_L2_model_'
+                               f'2W_10k_{model_name}_{self.config.getint("TRAIN", "classes_n")}_'
+                               f'{str(datetime.now().strftime("%d-%m-%Y-%H:%M"))}_best.pt')
 
-                #train_iou.append(train_iou_score / len(train_loader))
-                train_acc.append(train_acc_score / len(train_loader))
-                #train_ap.append(train_ap_score / len(train_loader))
-                train_dice.append(train_dice_score / len(train_loader))
-                train_f1.append(train_f1_score / len(train_loader))
-                train_precision.append(train_precision_score / len(train_loader))
-                train_recall.append(train_recall_score / len(train_loader))
-                #train_roc.append(train_roc_score / len(train_loader))
+                train_iou_mean = train_iou_score / len(train_loader)
+                train_acc_mean = train_acc_score / len(train_loader)
+                train_ap_mean = train_ap_score / len(train_loader)
+                train_dice_mean = train_dice_score / len(train_loader)
+                train_f1_mean = train_f1_score / len(train_loader)
+                train_precision_mean = train_precision_score / len(train_loader)
+                train_recall_mean = train_recall_score / len(train_loader)
+                train_auroc_mean = train_auroc_score / len(train_loader)
 
-                val_acc.append(val_acc_score / len(val_loader))
-                #val_iou.append(val_iou_score / len(val_loader))
-                #val_ap.append(train_ap_score / len(train_loader))
-                val_dice.append(train_dice_score / len(train_loader))
-                val_f1.append(train_f1_score / len(train_loader))
-                val_precision.append(train_precision_score / len(train_loader))
-                val_recall.append(train_recall_score / len(train_loader))
-                #val_roc.append(train_roc_score / len(train_loader))
+                train_iou.append(train_iou_mean)
+                train_acc.append(train_acc_mean)
+                train_ap.append(train_ap_mean)
+                train_dice.append(train_dice_mean)
+                train_f1.append(train_f1_mean)
+                train_precision.append(train_precision_mean)
+                train_recall.append(train_recall_mean)
+                train_auroc.append(train_auroc_mean)
+
+                val_iou_mean = val_iou_score / len(val_loader)
+                val_acc_mean = val_acc_score / len(val_loader)
+                val_ap_mean = val_ap_score / len(val_loader)
+                val_dice_mean = val_dice_score / len(val_loader)
+                val_f1_mean = val_f1_score / len(val_loader)
+                val_precision_mean = val_precision_score / len(val_loader)
+                val_recall_mean = val_recall_score / len(val_loader)
+                val_auroc_mean = val_auroc_score / len(val_loader)
+
+                val_iou.append(val_iou_mean)
+                val_acc.append(val_acc_mean)
+                val_ap.append(val_ap_mean)
+                val_dice.append(val_dice_mean)
+                val_f1.append(val_f1_mean)
+                val_precision.append(val_precision_mean)
+                val_recall.append(val_recall_mean)
+                val_auroc.append(val_auroc_mean)
 
                 if self.config.getboolean('WANDB', 'wandbLog'):
                     wandb.log({"epoch": epoch + 1,
-                               "train accuracy": train_acc_score / len(train_loader),
-                               "train IoU": train_iou_score / len(train_loader),
-                               "train average precision": train_ap_score / len(train_loader),
-                               "train dice": train_dice_score / len(train_loader),
-                               "train f1": train_f1_score / len(train_loader),
-                               "train precision": train_precision_score / len(train_loader),
-                               "train recall": train_recall_score / len(train_loader),
-                               "train ROC": train_roc_score / len(train_loader),
-                               "val accuracy": val_acc_score / len(val_loader),
-                               "val mIoU": val_iou_score / len(val_loader),
-                               "val average precision": val_ap_score / len(val_loader),
-                               "val dice": val_dice_score / len(val_loader),
-                               "val f1": val_f1_score / len(val_loader),
-                               "val precision": val_precision_score / len(val_loader),
-                               "val recall": val_recall_score / len(val_loader),
-                               "val ROC": val_roc_score / len(val_loader),
-                               "train loss": train_loss / len(train_loader),
-                               "val loss": val_loss / len(val_loader),
+                               "train accuracy": train_acc_mean,
+                               "train IoU": train_iou_mean,
+                               "train average precision": train_ap_mean,
+                               "train dice": train_dice_mean,
+                               "train f1": train_f1_mean,
+                               "train precision": train_precision_mean,
+                               "train recall": train_recall_mean,
+                               "train AUROC": train_auroc_mean,
+
+                               "val accuracy": val_acc_mean,
+                               "val mIoU": val_iou_mean,
+                               "val average precision": val_ap_mean,
+                               "val dice": val_dice_mean,
+                               "val f1": val_f1_mean,
+                               "val precision": val_precision_mean,
+                               "val recall": val_recall_mean,
+                               "val AUROC": val_auroc_mean,
+
+                               "train loss": train_loss_mean,
+                               "val loss": val_loss_mean,
                                })
 
-                print(f'Epoch: {epoch + 1} / {epochs}',
-                        f'Train accuracy: {train_acc_score / len(train_loader):.3f}..',
-                        #f'Train IoU: {train_iou_score / len(train_loader):.3f}..',
-                        #f'Train average precision: {train_ap_score / len(train_loader):.3f}..',
-                        f'Train dice: {train_dice_score / len(train_loader):.3f}..',
-                        f'Train f1: {train_f1_score / len(train_loader):.3f}..',
-                        f'Train precision: {train_precision_score / len(train_loader):.3f}..',
-                        f'Train recall: {train_recall_score / len(train_loader):.3f}..',
-                        #f'Train ROC: {train_roc_score / len(train_loader):.3f}..'
-                        f'Val accuracy: {val_acc_score / len(val_loader):.3f}..',
-                        #f'Val mIoU: {val_iou_score / len(val_loader):.3f}..',
-                        #f'Val average precision: {val_ap_score / len(val_loader):.3f}..',
-                        f'Val dice: {val_dice_score / len(val_loader):.3f}..',
-                        f'Val f1: {val_f1_score / len(val_loader):.3f}..',
-                        f'Val precision: {val_precision_score / len(val_loader):.3f}..',
-                        f'Val recall: {val_recall_score / len(val_loader):.3f}..',
-                        #f'Val ROC: {val_roc_score / len(val_loader):.3f}..',
-                        f'Train loss: {train_loss / len(train_loader):.3f}..',
-                        f'Val loss: {val_loss / len(val_loader):.3f}..',
-                        f'Time: {((time.time() - since) / 60):.2f}minutes'
-                    )
-                logger.info(f'Epoch: {epoch + 1} / {epochs}',
-                        f'Train accuracy: {train_acc_score / len(train_loader):.3f}..',
-                        #f'Train IoU: {train_iou_score / len(train_loader):.3f}..',
-                        #f'Train average precision: {train_ap_score / len(train_loader):.3f}..',
-                        f'Train dice: {train_dice_score / len(train_loader):.3f}..',
-                        f'Train f1: {train_f1_score / len(train_loader):.3f}..',
-                        f'Train precision: {train_precision_score / len(train_loader):.3f}..',
-                        f'Train recall: {train_recall_score / len(train_loader):.3f}..',
-                        #f'Train ROC: {train_roc_score / len(train_loader):.3f}..'
-                        f'Val accuracy: {val_acc_score / len(val_loader):.3f}..',
-                        #f'Val mIoU: {val_iou_score / len(val_loader):.3f}..',
-                        #f'Val average precision: {val_ap_score / len(val_loader):.3f}..',
-                        f'Val dice: {val_dice_score / len(val_loader):.3f}..',
-                        f'Val f1: {val_f1_score / len(val_loader):.3f}..',
-                        f'Val precision: {val_precision_score / len(val_loader):.3f}..',
-                        f'Val recall: {val_recall_score / len(val_loader):.3f}..',
-                        #f'Val ROC: {val_roc_score / len(val_loader):.3f}..',
-                        f'Train loss: {train_loss / len(train_loader):.3f}..',
-                        f'Val loss: {val_loss / len(val_loader):.3f}..',
-                        f'Time: {((time.time() - since) / 60):.2f}minutes'
-                            )
+                print(f'Epoch: {int(epoch + 1)} / {int(epochs)}',
+                      f'Train accuracy: {train_acc_mean:.3f}..',
+                      f'Train IoU: {train_iou_mean:.3f}..',
+                      f'Train average precision: {train_ap_mean:.3f}..',
+                      f'Train dice: {train_dice_mean:.3f}..',
+                      f'Train f1: {train_f1_mean:.3f}..',
+                      f'Train precision: {train_precision_mean:.3f}..',
+                      f'Train recall: {train_recall_mean:.3f}..',
+                      f'Train AUROC: {train_auroc_mean:.3f}..'
 
-                if self.config.getboolean('TRAIN', 'early_stop') and (val_loss / len(val_loader)) > min_loss:
+                      f'Val accuracy: {val_acc_mean:.3f}..',
+                      f'Val IoU: {val_iou_mean:.3f}..',
+                      f'Val average precision: {val_ap_mean:.3f}..',
+                      f'Val dice: {val_dice_mean:.3f}..',
+                      f'Val f1: {val_f1_mean:.3f}..',
+                      f'Val precision: {val_precision_mean:.3f}..',
+                      f'Val recall: {val_recall_mean:.3f}..',
+                      f'Val AUROC: {val_auroc_mean:.3f}..',
+
+                      f'Train loss: {train_loss_mean:.3f}..',
+                      f'Val loss: {val_loss_mean:.3f}..',
+                      f'Time: {((time.time() - start) / 60):.2f} minutes'
+                      )
+                """
+                logger.info(f'Epoch: {int(epoch + 1)} / {int(epochs)}',
+                            f'Train accuracy: {train_acc_mean:.3f}..',
+                            f'Train IoU: {train_iou_mean:.3f}..',
+                            f'Train average precision: {train_ap_mean:.3f}..',
+                            f'Train dice: {train_dice_mean:.3f}..',
+                            f'Train f1: {train_f1_mean:.3f}..',
+                            f'Train precision: {train_precision_mean:.3f}..',
+                            f'Train recall: {train_recall_mean:.3f}..',
+                            f'Train AUROC: {train_auroc_mean:.3f}..'
+
+                            f'Val accuracy: {val_acc_mean:.3f}..',
+                            f'Val mIoU: {val_iou_mean:.3f}..',
+                            f'Val average precision: {val_ap_mean:.3f}..',
+                            f'Val dice: {val_dice_mean:.3f}..',
+                            f'Val f1: {val_f1_mean:.3f}..',
+                            f'Val precision: {val_precision_mean:.3f}..',
+                            f'Val recall: {val_recall_mean:.3f}..',
+                            f'Val ROC: {val_auroc_mean:.3f}..',
+
+                            f'Train loss: {train_loss_mean:.3f}..',
+                            f'Val loss: {val_loss_mean:.3f}..',
+                            f'Time: {((time.time() - start) / 60):.2f} minutes'
+                            )
+                """
+
+                if self.config.getboolean('TRAIN', 'early_stop') and val_loss_mean > min_loss:
                     no_improvement += 1
-                    min_loss = (val_loss / len(val_loader))
+                    min_loss = val_loss_mean
                     print(f'Validation loss did not decreased for {no_improvement} time')
                     logger.info(f'Validation loss did not decreased for {no_improvement} time')
                     early_stop = 10
@@ -314,27 +355,27 @@ class Train(object):
                         break
 
         history = {'train_acc': train_acc,
-                    'train_iou': train_iou,
-                    'train_ap': train_ap,
-                    'train_dice': train_dice,
-                    'train_f1': train_f1,
-                    'train_precision': train_precision,
-                    'train_recall': train_recall,
-                    'train_roc': train_roc,
-                    'val_iou': val_iou,
-                    'val_acc': val_acc,
-                    'val_ap': val_ap,
-                    'val_dice': val_dice,
-                    'val_f1': val_f1,
-                    'val_precision': val_precision,
-                    'val_recall': val_recall,
-                    'val_roc': val_roc,
-                    'train_losses': train_losses,
-                    'val_losses': val_losses,
-                    'lrs': lrs
+                   'train_iou': train_iou,
+                   'train_ap': train_ap,
+                   'train_dice': train_dice,
+                   'train_f1': train_f1,
+                   'train_precision': train_precision,
+                   'train_recall': train_recall,
+                   'train_auroc': train_auroc,
+                   'val_iou': val_iou,
+                   'val_acc': val_acc,
+                   'val_ap': val_ap,
+                   'val_dice': val_dice,
+                   'val_f1': val_f1,
+                   'val_precision': val_precision,
+                   'val_recall': val_recall,
+                   'val_auroc': val_auroc,
+                   'train_loss': train_losses,
+                   'val_loss': val_losses,
+                   'lrs': lrs
                    }
 
         print(f'Total time: {((time.time() - start_time) / 60):.2f} minutes')
         logger.info(f'Total time: {((time.time() - start_time) / 60):.2f} minutes')
 
-        return history, model.state_dict()
+        return history, model

@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 
 import logging.config
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('burn_severity')
 
 config = configparser.ConfigParser()
 config.read('configurations.ini')
@@ -321,16 +321,18 @@ class Preprocessing(object):
         return l_img
 
     @staticmethod
-    def delete_landsat_bands(image: numpy.ndarray, channels: List[int]) -> numpy.ndarray:
+    def delete_landsat_bands(image: numpy.ndarray, channels: List[int], level: str ='L1') -> numpy.ndarray:
         """
         Delete some bands from a given image
+        :param level:
         :param image: image
         :param channels: channels to remove
         :return: satellite image with removed bands
         """
-        bands = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        if level == 'L1': bands = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        elif level == 'L2': bands = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         if len(set(channels) - set(bands)) != 0:
-            logger.warning(f'Band(s) {set(channels) - set(bands)} are not part of Landsat 8 & 9')
+            logger.warning(f'Band(s) {set(channels) - set(bands)} are not part of this satellite')
         channels.sort(reverse=True)
         for c in channels:
             image = np.delete(image, c - 1, axis=2)

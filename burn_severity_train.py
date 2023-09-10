@@ -9,14 +9,15 @@ import json
 import subprocess
 import logging.config
 import configparser
-import numpy as np
 import torch.nn as nn
 from typing import Dict
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
-from torchmetrics import JaccardIndex, Accuracy
+from torchmetrics import JaccardIndex, Accuracy, AveragePrecision, Dice, F1Score, Precision, Recall, AUROC
 
-from training.metrics import miou_score, pixel_acc, plot_loss, plot_acc, plot_mIoU
+
+from training.metrics import plot_loss, plot_acc, plot_mIoU
+from unet.trans_unet_plus2.trans_unet_plus2 import transunet_plus2
 from utils import Preprocessing, Normalize
 from utils.augmentation import DataAugmentation, Compose
 from data.dataset import SegmentationDataset
@@ -24,9 +25,11 @@ from training.train import Train
 from unet.trans_unet.vit_seg_modeling import VisionTransformer as ViT_seg
 from unet.trans_unet.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from unet.vanilla_unet.unet_arch import UNet
+from self_attention_cv.transunet import TransUnet
+from self_attention_cv import ViT, ResNet50ViT
 
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('burn_severity')
 logging.getLogger('PIL.TiffImagePlugin').setLevel(logging.WARNING)
 logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 logging.getLogger('matplotlib.pyplot').setLevel(logging.WARNING)
@@ -64,8 +67,8 @@ def base_train() -> Dict:
             logger.info('Filtering tiles')
             images, masks = prep.filter_masks(images, masks)
 
-    logger.info('Removing Satellite bands')
-    images = [prep.delete_landsat_bands(image, json.loads(config.get('DATA', 'deleteBands'))) for image in
+    logger.info('Removing satellite bands')
+    images = [prep.delete_landsat_bands(image, json.loads(config.get('DATA', 'deleteBands')), 'L2') for image in
               images]
 
     logger.info('Data augmentation init')
@@ -135,15 +138,25 @@ def base_train() -> Dict:
             wandb.config.model = model_name
 
     elif config.getboolean('TRANSUNET', 'use_model'):
+        """
         vit = config.get('TRANSUNET', 'vit')
         config_vit = CONFIGS_ViT_seg[vit]
         config_vit.n_classes = config.getint('TRAIN', 'classes_n')
         config_vit.n_skip = config.getint('TRANSUNET', 'skip_n')
-        # BEWARE: in the case of image tilling, the input_size needs to be modified
         model = ViT_seg(config_vit, img_size=config.getint('TRAIN', 'input_size'),
                         num_classes=config_vit.n_classes).to(device)
         model.load_from(weights=np.load(config_vit.pretrained_path))
         model_name = config.get('TRANSUNET', 'name')
+
+        model = TransUNet(image_size=256, pretrain=True, num_classes=config.getint('TRAIN', 'classes_n'),
+                          decoder_channels=[256,128,64,16])
+        """
+        #model = transunet_plus2(input_size=(512, 512, 8), filter_num=[16, 32, 64, 128], n_labels=2)
+
+        #resnetVit = ResNet50ViT(img_dim=512, pretrained_resnet=True, num_classes=2, resnet_layers=6)
+        model_name = config.get('TRANSUNET', 'name')
+        model = TransUnet(in_channels=8, img_dim=512, vit_blocks=12, vit_dim_linear_mhsa_block=1024, classes=2)
+
         if config.getboolean('WANDB', 'wandbLog'):
             wandb.config.model = model_name
 
@@ -166,6 +179,7 @@ def base_train() -> Dict:
     logger.info('Train model')
 
     if config.getboolean('WANDB', 'wandbLog'):
+        wandb.config.daataset = config.get('DATA', 'imagesPath')
         wandb.config.class_num = config.getint('TRAIN', 'classes_n')
         wandb.config.epochs = config.getint('TRAIN', 'epochs')
         wandb.config.batch_size = config.getint('TRAIN', 'batch_size')
@@ -188,10 +202,10 @@ def base_train() -> Dict:
             wandb.config.decoder_channels = config.get('U-NET W BACKBONE', 'decoder_channels')
         elif config.getboolean('U-NET', 'use_model'):
             wandb.config.in_channels = config.getint('U-NET', 'in_channels')
-        elif config.getboolean('TRANSUNET', 'use_model'):
-            wandb.config.vit = config.get('TRANSUNET', 'vit')
-            wandb.config.skip_num = config.getint('TRANSUNET', 'n_skip')
-            wandb.config.backbone = config.get('TRANSUNET', 'backbone')
+        #elif config.getboolean('TRANSUNET', 'use_model'):
+            #wandb.config.vit = config.get('TRANSUNET', 'vit')
+            #wandb.config.skip_num = config.getint('TRANSUNET', 'skip_n')
+            #wandb.config.backbone = config.get('TRANSUNET', 'backbone')
 
     history, model = train.fit(model, train_loader, val_loader, criterion, optimizer, device, scheduler, model_name)
 
@@ -199,14 +213,27 @@ def base_train() -> Dict:
     task = "binary" if number_classes == 2 else "multiclass"
     jaccard = JaccardIndex(task=task, num_classes=number_classes)
     accuracy = Accuracy(task=task, num_classes=number_classes)
+    ap = AveragePrecision(task=task, num_classes=number_classes)
+    dice = Dice(num_classes=number_classes)
+    f1 = F1Score(task=task, num_classes=number_classes)
+    precision = Precision(task=task, num_classes=number_classes)
+    recall = Recall(task=task, num_classes=number_classes)
+    auroc = AUROC(task=task, num_classes=number_classes)
+
     # cm = ConfusionMatrix(task=task, num_classes=number_classes)
     # model = model.load_state_dict(
     #    torch.load(f'/models/model_{model_name}_{config.getint("TRAIN", "classes_n")}_best.pt'))
-    test_iou = 0
-    test_acc = 0
+
     test_loss = 0
-    y_pred = []
-    y_true = []
+    test_iou_score = 0
+    test_acc_score = 0
+    test_ap_score = 0
+    test_dice_score = 0
+    test_f1_score = 0
+    test_precision_score = 0
+    test_recall_score = 0
+    test_auroc_score = 0
+
     model.eval()
     with torch.no_grad():
         for data in test_loader:
@@ -214,25 +241,62 @@ def base_train() -> Dict:
             image = img.to(device)
             mask = msk.to(device)
             mask = mask[:, 0, :, :].long()
-            y_true.extend(mask)
             output = model(image)
-            output = (torch.max(torch.exp(output), 1)[1]).data.cpu().numpy()
-            y_pred.extend(output)
-            test_iou += jaccard(output, mask)
-            test_acc += accuracy(output, mask)
+            pred = torch.argmax(output, dim=1)
+
+            test_iou_score += jaccard(pred, mask)
+            test_acc_score += accuracy(pred, mask)
+            test_dice_score += dice(pred, mask)
+            test_f1_score += f1(pred, mask)
+            test_precision_score += precision(pred, mask)
+            test_recall_score += recall(pred, mask)
+            if number_classes == 2:
+                preds = torch.amax(output, dim=1)
+                test_ap_score += ap(preds, mask)
+                test_auroc_score += auroc(preds, mask)
+            else:
+                test_ap_score += ap(output, mask)
+                test_auroc_score += auroc(output, mask)
+
             loss = criterion(output, mask)
             test_loss += loss.item()
 
+    test_iou_mean = test_iou_score / len(test_loader)
+    test_acc_mean = test_acc_score / len(test_loader)
+    test_ap_mean = test_ap_score / len(test_loader)
+    test_dice_mean = test_dice_score / len(test_loader)
+    test_f1_mean = test_f1_score / len(test_loader)
+    test_precision_mean = test_precision_score / len(test_loader)
+    test_recall_mean = test_recall_score / len(test_loader)
+    test_auroc_mean = test_auroc_score / len(test_loader)
+
     if config.getboolean('WANDB', 'wandbLog'):
-        wandb.log({"Test IoU": test_iou / len(test_loader),
-                   "Test accuracy": test_acc / len(test_loader),
-                   "Test loss": test_loss / len(test_loader)
+        wandb.log({"test accuracy": test_acc_mean,
+                   "test IoU": test_iou_mean,
+                   "test average precision": test_ap_mean,
+                   "test dice": test_dice_mean,
+                   "test f1": test_f1_mean,
+                   "test precision": test_precision_mean,
+                   "test recall": test_recall_mean,
+                   "test AUROC": test_auroc_mean,
                    })
 
-    logger.info(f'Test IoU: {test_iou / len(test_loader)}')
-    logger.info(f'Test Accuracy: {test_acc / len(test_loader)}')
-    print('Test IoU', test_iou / len(test_loader))
-    print('Test Accuracy', test_acc / len(test_loader))
+    logger.info(f'Test IoU: {test_iou_mean}')
+    logger.info(f'Test accuracy: {test_acc_mean}')
+    logger.info(f'Test average precision: {test_ap_mean}')
+    logger.info(f'Test dice: {test_dice_mean}')
+    logger.info(f'Test f1: {test_f1_mean}')
+    logger.info(f'Test precision: {test_precision_mean}')
+    logger.info(f'Test recall: {test_recall_mean}')
+    logger.info(f'Test AUROC: {test_auroc_mean}')
+    print('Test IoU', test_iou_mean)
+    print('Test accuracy', test_acc_mean)
+    print('Test average precision', test_ap_mean)
+    print('Test dice', test_dice_mean)
+    print('Test f1', test_f1_mean)
+    print('Test precision', test_precision_mean)
+    print('Test recall', test_recall_mean)
+    print('Test AUROC', test_auroc_mean)
     return history
 
 

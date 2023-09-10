@@ -21,6 +21,8 @@ tqdm = "~=4.64.1"
 wandb = "~=0.13.10"
 requests = "==2.31.0"
 torchmetrics = "*"
+babel = "*"
+keras = "*"
 
 [dev-packages]
 

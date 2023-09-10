@@ -14,7 +14,7 @@ from torch.utils.data import Subset
 
 import logging.config
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('burn_severity')
 
 
 def pixel_accuracy(output: torch.Tensor, mask: torch.Tensor) -> float:
@@ -185,6 +185,7 @@ def pixel_acc(model, test_set: Subset, device: torch.device) -> List[float]:
         accuracy.append(acc)
     return accuracy
 
+
 def plot_loss(history: Dict) -> None:
     """
     Plot the loss function
@@ -193,8 +194,8 @@ def plot_loss(history: Dict) -> None:
     plt.plot(history['val_loss'], label='val', marker='o')
     plt.plot(history['train_loss'], label='train', marker='o')
     plt.title('Loss per epoch')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
+    plt.ylabel('Loss')
+    plt.xlabel('Epoch')
     plt.legend(), plt.grid()
     plt.show()
 
@@ -204,11 +205,11 @@ def plot_mIoU(history: Dict) -> None:
     Plot the mean intersection of union
     :param history: the training history
     """
-    plt.plot(history['train_mIoU'], label='train_mIoU', marker='*')
-    plt.plot(history['val_mIoU'], label='val_mIoU', marker='*')
+    plt.plot(history['train_iou'], label='train_iou', marker='*')
+    plt.plot(history['val_iou'], label='val_iou', marker='*')
     plt.title('Score per epoch')
-    plt.ylabel('mean IoU')
-    plt.xlabel('epoch')
+    plt.ylabel('IoU')
+    plt.xlabel('Epoch')
     plt.legend(), plt.grid()
     plt.show()
 
@@ -222,7 +223,7 @@ def plot_acc(history: Dict) -> None:
     plt.plot(history['val_acc'], label='val_accuracy', marker='*')
     plt.title('Accuracy per epoch')
     plt.ylabel('Accuracy')
-    plt.xlabel('epoch')
+    plt.xlabel('Epoch')
     plt.legend(), plt.grid()
     plt.show()
 

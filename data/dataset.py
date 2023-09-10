@@ -12,7 +12,7 @@ from utils import Preprocessing
 
 import logging.config
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('burn_severity')
 
 
 class SegmentationDataset(Dataset):
