@@ -3,3 +3,4 @@ wandb/
 *.pt
 *.npz
 /venv
+/models/
